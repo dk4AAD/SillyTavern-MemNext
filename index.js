@@ -1608,8 +1608,6 @@ let $popout = null;
 let $settings_element = null;
 let $original_settings_parent = null;
 
-const settings_div_id = 'memnext_settings';
-
 function initialize_popout() {
     $settings_element = $(`#${settings_div_id}`).find(`.inline-drawer-content .${settings_content_class}`);
     $original_settings_parent = $settings_element.parent();
