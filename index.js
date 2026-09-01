@@ -1,6 +1,5 @@
 /* eslint-disable */
 import { getRegexScripts, runRegexScript } from '../../../../scripts/extensions/regex/engine.js';
-import { itemizedPrompts } from '../../../../scripts/itemized-prompts.js';
 import {
     getStringHash,
     debounce,
