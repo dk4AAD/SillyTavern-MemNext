@@ -113,6 +113,7 @@ const default_short_template = `[Recent Events Summary]:\n{{${generic_memories_m
 
 const default_summary_macros = {
     "message": { name: "message", default: true, enabled: true, type: "special", instruct_template: false, apply_regex: true, description: "The message being summarized" },
+    "speaker": { name: "speaker", default: true, enabled: true, type: "special", instruct_template: false, apply_regex: true, description: "The name of the character or user who sent the message" },
     "words": { name: "words", default: true, enabled: true, type: "custom", instruct_template: false, apply_regex: false, command: "/memnext-max-summary-tokens", description: "Max response tokens defined by preset" },
     "history": { name: "history", default: true, enabled: false, type: "preset", instruct_template: true, apply_regex: true, start: 1, end: 6, bot_messages: true, user_messages: true, bot_summaries: false, user_summaries: false }
 };
@@ -2312,8 +2313,8 @@ class SummaryPromptEditInterface {
             $name.attr('title', macro.description)
         }
 
-        // special case for the {{message}} macro
-        if (macro.name === "message") {
+        // special case for special macros
+        if (macro.type === "special") {
             $macro_type_div.remove()
             $range_div.remove()
             $script_div.remove()
@@ -2420,6 +2421,25 @@ class SummaryPromptEditInterface {
     }
 
     // special macros
+    async special_macro_speaker(index) {
+        let macro = this.get_macro("speaker")
+        let message = this.ctx.chat[index]
+        let role = message.is_user ? "user" : message.is_system ? "system" : "assistant"
+        let text = message.name
+        if (!text) {
+            text = message.is_user ? this.ctx.name1 : this.ctx.name2
+        }
+        text = await this.evaluate_script(macro, index, text)
+        if (!text) return null
+        let payload = []
+        if (macro.instruct_template && role !== "system") {
+            text = this.ctx.formatInstructModePrompt(this.ctx.chat[index].name, text, role === "user")
+            payload.push({role: role, content: text})
+        } else {
+            payload.push({role: this.get_prompt_role(true), content: text})
+        }
+        return payload
+    }
     async special_macro_message(index) {
         let macro = this.get_macro("message")
         let message = this.ctx.chat[index]
@@ -2447,7 +2467,7 @@ class SummaryPromptEditInterface {
         this.$prompt_role?.val(get_settings('prompt_role'))
         this.$prefill?.val(escape_string(get_settings('prefill')))
         this.$show_prefill?.prop('checked', get_settings('show_prefill', true))
-        this.macros = Object.assign(default_summary_macros, structuredClone(get_settings('summary_prompt_macros')))
+        this.macros = Object.assign(structuredClone(default_summary_macros), structuredClone(get_settings('summary_prompt_macros')))
 
         // for each macro, ensure default settings if not specified
         for (let name of Object.keys(this.macros)) {
@@ -2641,6 +2661,9 @@ class SummaryPromptEditInterface {
         // special macro?
         if (name === "message") {
             return this.special_macro_message(index)
+        }
+        if (name === "speaker") {
+            return this.special_macro_speaker(index)
         }
 
         if (macro.type === "preset") {  // range presets
