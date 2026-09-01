@@ -1369,7 +1369,7 @@ class PromptEditInterface {
     }
 
     async show() {
-        const popup = new this.ctx.Popup(this.html_template, this.ctx.POPUP_TYPE.TEXT, undefined, {
+        const popup = new this.ctx.Popup(this.html_template, this.ctx.POPUP_TYPE.TEXT, '', {
             wider: true,
             okButton: 'Save',
             cancelButton: 'Cancel'
@@ -1427,7 +1427,7 @@ class MemoryEditInterface {
     }
 
     async show() {
-        const popup = new this.ctx.Popup(this.html_template, this.ctx.POPUP_TYPE.TEXT, undefined, { wider: true });
+        const popup = new this.ctx.Popup(this.html_template, this.ctx.POPUP_TYPE.TEXT, '', { wider: true });
         const $content = $(popup.content);
         $content.closest('dialog').css('min-width', '80%');
 
@@ -2115,7 +2115,7 @@ class SummaryPromptEditInterface {
         this.from_settings()
     }
     async init() {
-        this.popup = new this.ctx.Popup(this.html_template, this.ctx.POPUP_TYPE.TEXT, undefined, {wider: true, okButton: 'Save', cancelButton: 'Cancel'});
+        this.popup = new this.ctx.Popup(this.html_template, this.ctx.POPUP_TYPE.TEXT, '', {wider: true, okButton: 'Save', cancelButton: 'Cancel'});
         this.$content = $(this.popup.content)
         this.$buttons = this.$content.find('.popup-controls')
         this.$preview = this.$content.find('#preview_summary_prompt')
@@ -2842,4 +2842,42 @@ function add_i18n($element=null) {
             }
         });
     })
+}
+function refresh_select2_element(element, selected, options, placeholder="", callback) {
+    let $select = element
+    let id;
+    if (typeof(element) === "string") {
+        $select = $(`#${element}`)
+        id = element
+    } else {
+        id = element.attr('id')
+    }
+    let $dropdown = $(`#select2-${id}-results`)
+    if ($dropdown.length > 0) return
+
+    $select.empty()
+    for (let {id, name} of options) {
+        name = clean_string_for_html(name)
+        let option = $(`<option value="${id}">${name}</option>`)
+        $select.append(option);
+    }
+    let $widget = $(`.${settings_content_class} ul#select2-${id}-container`)
+    if ($widget.length === 0) {
+        $select.select2({
+            width: '100%',
+            placeholder: placeholder,
+            allowClear: true,
+            closeOnSelect: false,
+            dropdownParent: $select.parent()
+        });
+        $select.on('change', () => {
+            let values = []
+            for (let value of $select.select2('data')) {
+                values.push(value.text)
+            }
+            callback(values)
+        })
+    }
+    $select.val(selected)
+    $select.trigger('change.select2')
 }
