@@ -1,0 +1,1567 @@
+/* eslint-disable */
+import {
+    getStringHash,
+    debounce,
+    copyText,
+    trimToEndSentence,
+    download,
+    parseJsonFile,
+    stringToRange,
+    waitUntilCondition
+} from '../../../utils.js';
+import {
+    animation_duration,
+    scrollChatToBottom,
+    saveSettingsDebounced,
+    getCharacterCardFields,
+    messageFormatting,
+    generateRaw,
+    createRawPrompt,
+    getMaxContextSize,
+    streamingProcessor,
+    amount_gen,
+    system_message_types,
+    extension_prompt_roles,
+    extension_prompt_types,
+    CONNECT_API_MAP,
+    main_api,
+    online_status,
+    chat_metadata
+} from '../../../../script.js';
+import { getContext, extension_settings, saveMetadataDebounced } from '../../../extensions.js';
+import { formatInstructModePrompt } from '../../../instruct-mode.js';
+import { selected_group, openGroupId } from '../../../group-chats.js';
+import { loadMovingUIState, power_user } from '../../../power-user.js';
+import { dragElement } from '../../../RossAscends-mods.js';
+import { debounce_timeout } from '../../../constants.js';
+import { MacrosParser } from '../../../macros.js';
+import { itemizedPrompts } from '../../../../scripts/itemized-prompts.js';
+import { t, translate } from '../../../i18n.js';
+
+export { MODULE_NAME };
+
+const MODULE_NAME = 'memnext';
+const MODULE_NAME_FANCY = 'MemNext';
+const PROGRESS_BAR_ID = `${MODULE_NAME}_progress_bar`;
+
+// CSS classes
+const css_message_div = `${MODULE_NAME}_display`;
+const css_short_memory = `${MODULE_NAME}_short_memory`;
+const css_long_memory = `${MODULE_NAME}_long_memory`;
+const css_exclude_memory = `${MODULE_NAME}_exclude_memory`;
+const css_lagging_memory = `${MODULE_NAME}_lagging_memory`;
+const css_removed_message = `${MODULE_NAME}_removed_message`;
+const summary_div_class = `${MODULE_NAME}_text`;
+const summary_reasoning_class = `${MODULE_NAME}_reasoning`;
+const css_button_separator = `${MODULE_NAME}_button_separator`;
+const css_edit_textarea = `${MODULE_NAME}_edit_textarea`;
+const settings_div_id = `${MODULE_NAME}_settings`;
+const settings_content_class = `${MODULE_NAME}_settings_content`;
+const group_member_enable_button = `${MODULE_NAME}_group_member_enable`;
+const group_member_enable_button_highlight = `${MODULE_NAME}_group_member_enabled`;
+
+// Macros for memory injection
+const long_memory_macro = `memnext-long-term-memory`;
+const short_memory_macro = `memnext-short-term-memory`;
+const generic_memories_macro = `memnext-memories`;
+
+// Message button classes
+const summarize_button_class = `${MODULE_NAME}_summarize_button`;
+const edit_button_class = `${MODULE_NAME}_edit_button`;
+const forget_button_class = `${MODULE_NAME}_forget_button`;
+
+// Default prompt templates
+const default_message_summary_prompt = `You are a summarization assistant. Summarize the given fictional narrative in a single, concise statement of fact.
+Responses should be no more than {{words}} words.
+Include names when possible.
+Response must be in the past tense.
+Your response must ONLY contain the summary.
+
+{{#if history}}
+Following is a history of messages for context:
+{{history}}
+{{/if}}
+
+Following is the message to summarize:
+{{message}}
+`;
+
+const default_short_to_long_prompt = `You are a memory consolidation assistant. Incorporate the recent events into the established long-term memory narrative.
+Maintain chronological progression and integrate new developments seamlessly.
+Keep the narrative coherent, structured, and factual.
+Your response must ONLY contain the updated consolidated memory.
+
+[Existing Long-Term Memory]:
+{{existing_long_memory}}
+
+[Recent Events to Incorporate]:
+{{new_events}}
+`;
+
+const default_long_compaction_prompt = `You are a memory consolidation assistant. The existing long-term memory narrative has grown too long for the context budget.
+Condense and compress the following narrative while strictly preserving essential plot points, character relations, major events, and crucial decisions.
+Remove minor transitional details and summarize older events more aggressively.
+Your response must ONLY contain the condensed narrative.
+
+[Long-Term Memory to Condense]:
+{{long_memory}}
+`;
+
+const default_long_template = `[Past Events Summary]:\n{{${generic_memories_macro}}}\n`;
+const default_short_template = `[Recent Events Summary]:\n{{${generic_memories_macro}}}\n`;
+
+const default_summary_macros = {
+    "message": { name: "message", default: true, enabled: true, type: "special", instruct_template: false, apply_regex: true, description: "The message being summarized" },
+    "words": { name: "words", default: true, enabled: true, type: "custom", instruct_template: false, apply_regex: false, command: "/memnext-max-summary-tokens", description: "Max response tokens defined by preset" },
+    "history": { name: "history", default: true, enabled: false, type: "preset", instruct_template: true, apply_regex: true, start: 1, end: 6, bot_messages: true, user_messages: true, bot_summaries: false, user_summaries: false }
+};
+
+const default_settings = {
+    // Message inclusion
+    message_length_threshold: 10,
+    include_user_messages: true,
+    include_system_messages: false,
+    include_narrator_messages: false,
+
+    // Three editable prompts
+    message_summary_prompt: default_message_summary_prompt,
+    short_to_long_prompt: default_short_to_long_prompt,
+    long_compaction_prompt: default_long_compaction_prompt,
+
+    summary_prompt_macros: default_summary_macros,
+    prompt_role: extension_prompt_roles.SYSTEM,
+    prefill: "",
+    show_prefill: false,
+    connection_profile: "",
+
+    // Auto-summarization
+    auto_summarize: true,
+    summarization_delay: 0,
+    summarization_time_delay: 0,
+    summarization_time_delay_skip_first: false,
+    auto_summarize_batch_size: 1,
+    auto_summarize_message_limit: -1, // -1 means lookback entire chat from beginning
+    parallel_summaries_count: 1,
+    auto_summarize_on_edit: false,
+    auto_summarize_on_swipe: true,
+    auto_summarize_on_continue: false,
+    auto_summarize_progress: true,
+    auto_summarize_on_send: false,
+    auto_summarize_block_generation: true,
+    block_chat: true,
+
+    // Accumulative memory budgets (percent of max context)
+    long_term_context_limit: 20, // 20%
+    short_term_context_limit: 15, // 15%
+    compaction_threshold_percent: 15, // trigger when free space in context < 15%
+
+    // Truncation & Injection
+    summary_injection_separator: "\n* ",
+    summary_injection_threshold: 10,
+    summary_injection_threshold_type: "messages",
+    exclude_messages_after_threshold: true,
+    keep_last_user_message: true,
+
+    // Cache preservation triggers
+    injection_threshold_update_trigger_messages: 5,
+    injection_threshold_update_trigger_summaries: 0,
+    injection_threshold_update_trigger_context: 0,
+
+    long_template: default_long_template,
+    short_template: default_short_template,
+    injection_position: extension_prompt_types.IN_PROMPT, // 0 = after system prompt
+    injection_role: extension_prompt_roles.SYSTEM, // 0 = system
+
+    // Misc
+    debug_mode: false,
+    display_memories: true,
+    default_chat_enabled: true,
+    use_global_toggle_state: false
+};
+
+const global_settings = {
+    profiles: {},
+    character_profiles: {},
+    profile: 'Default',
+    notify_on_profile_switch: false,
+    global_toggle_state: true,
+    disabled_group_characters: {},
+    memory_edit_interface_settings: {}
+};
+
+const settings_ui_map = {};
+
+// Logging helpers
+function log(...args) {
+    console.log(`[${MODULE_NAME_FANCY}]`, ...args);
+}
+function debug(...args) {
+    if (get_settings('debug_mode')) {
+        log("[DEBUG]", ...args);
+    }
+}
+function error(...args) {
+    console.error(`[${MODULE_NAME_FANCY}]`, ...args);
+    if (typeof toastr !== 'undefined' && toastr?.error) {
+        toastr.error(args.join(' '), MODULE_NAME_FANCY);
+    }
+}
+function toast(message, type = "info") {
+    if (typeof toastr !== 'undefined' && toastr?.[type]) {
+        toastr[type](message, MODULE_NAME_FANCY);
+    }
+}
+const toast_debounced = debounce(toast, 500);
+
+const saveChatDebounced = debounce(() => {
+    const ctx = getContext();
+    if (ctx && typeof ctx.saveChat === 'function') {
+        ctx.saveChat();
+    }
+}, debounce_timeout.relaxed);
+
+// Token counting and context utilities
+function count_tokens(text, padding = 0) {
+    if (typeof text !== 'string' || !text) return 0;
+    const ctx = getContext();
+    if (ctx && typeof ctx.getTokenCount === 'function') {
+        return ctx.getTokenCount(text, padding);
+    }
+    // Fallback estimation if getTokenCount unavailable
+    return Math.ceil(text.length / 4);
+}
+
+function get_chat_context_size() {
+    return getMaxContextSize() || 4096;
+}
+
+function get_long_token_limit() {
+    const limit_percent = Number(get_settings('long_term_context_limit')) || 20;
+    const context_size = get_chat_context_size();
+    return Math.floor(context_size * (limit_percent / 100));
+}
+
+function get_short_token_limit() {
+    const limit_percent = Number(get_settings('short_term_context_limit')) || 15;
+    const context_size = get_chat_context_size();
+    return Math.floor(context_size * (limit_percent / 100));
+}
+
+function get_last_char_message_index() {
+    const ctx = getContext();
+    const chat = ctx?.chat;
+    if (!Array.isArray(chat)) return undefined;
+    for (let i = chat.length - 1; i >= 0; i--) {
+        const msg = chat[i];
+        if (!msg || msg.is_user || msg.is_system || msg.extra?.type === system_message_types.NARRATOR) continue;
+        return i;
+    }
+    return undefined;
+}
+
+function get_last_prompt_size() {
+    const last_index = get_last_char_message_index();
+    if (last_index === undefined) return 0;
+    if (typeof itemizedPrompts !== 'undefined' && Array.isArray(itemizedPrompts)) {
+        for (let i = 0; i < itemizedPrompts.length; i++) {
+            const item = itemizedPrompts[i];
+            if (item && item.mesId === last_index) {
+                let raw = item.rawPrompt;
+                if (raw !== undefined) {
+                    if (Array.isArray(raw)) raw = raw.map(x => x?.content || '').join('\n');
+                    return count_tokens(raw);
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+function get_free_context_space() {
+    const total = get_chat_context_size();
+    const prompt_size = get_last_prompt_size();
+    return Math.max(0, total - prompt_size);
+}
+
+function get_free_context_percent() {
+    const total = get_chat_context_size();
+    if (total <= 0) return 100;
+    return Math.round((get_free_context_space() / total) * 100);
+}
+
+// Data validation and access helpers
+function get_data(message, key) {
+    if (!message || typeof message !== 'object') return null;
+    if (!message.extra || typeof message.extra !== 'object') return null;
+    const data = message.extra[MODULE_NAME];
+    if (!data || typeof data !== 'object') return null;
+    return data[key] !== undefined ? data[key] : null;
+}
+
+function set_data(message, key, value) {
+    if (!message || typeof message !== 'object') return;
+    if (!message.extra || typeof message.extra !== 'object') message.extra = {};
+    if (!message.extra[MODULE_NAME] || typeof message.extra[MODULE_NAME] !== 'object') {
+        message.extra[MODULE_NAME] = {};
+    }
+    message.extra[MODULE_NAME][key] = value;
+}
+
+function get_memory(message) {
+    return get_data(message, 'memory');
+}
+
+function get_chat_long_term_memory() {
+    if (!chat_metadata || typeof chat_metadata !== 'object') return '';
+    const memData = chat_metadata[MODULE_NAME];
+    if (!memData || typeof memData !== 'object') return '';
+    return typeof memData.long_term_memory === 'string' ? memData.long_term_memory : '';
+}
+
+function set_chat_long_term_memory(text) {
+    if (!chat_metadata || typeof chat_metadata !== 'object') return;
+    if (!chat_metadata[MODULE_NAME] || typeof chat_metadata[MODULE_NAME] !== 'object') {
+        chat_metadata[MODULE_NAME] = {};
+    }
+    chat_metadata[MODULE_NAME].long_term_memory = String(text ?? '');
+    saveMetadataDebounced();
+}
+
+function get_current_character_identifier() {
+    const context = getContext();
+    if (!context) return null;
+    if (context.groupId) return context.groupId;
+    const index = context.characterId;
+    if (index === undefined || index === null) return null;
+    return context.characters?.[index]?.avatar || null;
+}
+
+function clean_string_for_html(text) {
+    return String(text ?? '').replace(/["&'<>]/g, '');
+}
+
+function escape_string(text) {
+    return String(text ?? '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t');
+}
+
+function unescape_string(text) {
+    return String(text ?? '').replace(/\\n/g, '\n').replace(/\\r/g, '\r').replace(/\\t/g, '\t').replace(/\\\\/g, '\\');
+}
+
+// Settings management
+function initialize_settings() {
+    if (extension_settings[MODULE_NAME] !== undefined) {
+        log("Settings already initialized.");
+        soft_reset_settings();
+    } else {
+        log("Initializing default settings...");
+        extension_settings[MODULE_NAME] = structuredClone(global_settings);
+        extension_settings[MODULE_NAME].profiles['Default'] = structuredClone(default_settings);
+    }
+    saveSettingsDebounced();
+}
+
+function soft_reset_settings() {
+    if (!extension_settings[MODULE_NAME] || typeof extension_settings[MODULE_NAME] !== 'object') {
+        extension_settings[MODULE_NAME] = structuredClone(global_settings);
+    }
+    for (let key of Object.keys(global_settings)) {
+        if (extension_settings[MODULE_NAME][key] === undefined) {
+            extension_settings[MODULE_NAME][key] = structuredClone(global_settings[key]);
+        }
+    }
+    const profiles = extension_settings[MODULE_NAME].profiles;
+    if (!profiles || typeof profiles !== 'object' || Object.keys(profiles).length === 0) {
+        extension_settings[MODULE_NAME].profiles = { 'Default': structuredClone(default_settings) };
+    }
+    for (let profile of Object.values(extension_settings[MODULE_NAME].profiles)) {
+        if (!profile || typeof profile !== 'object') continue;
+        for (let key of Object.keys(default_settings)) {
+            if (profile[key] === undefined) {
+                profile[key] = structuredClone(default_settings[key]);
+            }
+        }
+    }
+}
+
+function get_settings(key = null) {
+    const ext = extension_settings[MODULE_NAME];
+    if (!ext) return key ? default_settings[key] : default_settings;
+    if (key === 'profile') return ext.profile || 'Default';
+    if (key in global_settings) return ext[key];
+
+    const current_profile = ext.profile || 'Default';
+    const profile_settings = ext.profiles?.[current_profile] || ext.profiles?.['Default'];
+    if (key === null) return profile_settings || default_settings;
+    return profile_settings?.[key] !== undefined ? profile_settings[key] : default_settings[key];
+}
+
+function set_settings(key, value) {
+    const ext = extension_settings[MODULE_NAME];
+    if (!ext) return;
+    if (key === 'profile') {
+        ext.profile = value;
+    } else if (key in global_settings) {
+        ext[key] = value;
+    } else {
+        const current_profile = ext.profile || 'Default';
+        if (!ext.profiles[current_profile]) {
+            ext.profiles[current_profile] = structuredClone(default_settings);
+        }
+        ext.profiles[current_profile][key] = value;
+    }
+    saveSettingsDebounced();
+}
+
+function get_character_profile() {
+    const char_id = get_current_character_identifier();
+    if (!char_id) return null;
+    return extension_settings[MODULE_NAME]?.character_profiles?.[char_id] || null;
+}
+
+function get_chat_profile() {
+    const meta = chat_metadata;
+    return meta?.[MODULE_NAME]?.profile || null;
+}
+
+function chat_enabled() {
+    if (get_settings('use_global_toggle_state')) {
+        return get_settings('global_toggle_state');
+    }
+    const meta = chat_metadata;
+    if (!meta || typeof meta !== 'object') return get_settings('default_chat_enabled');
+    if (meta[MODULE_NAME]?.enabled !== undefined) {
+        return Boolean(meta[MODULE_NAME].enabled);
+    }
+    return get_settings('default_chat_enabled');
+}
+
+function set_chat_enabled(val) {
+    if (get_settings('use_global_toggle_state')) {
+        set_settings('global_toggle_state', Boolean(val));
+    } else {
+        if (!chat_metadata || typeof chat_metadata !== 'object') return;
+        if (!chat_metadata[MODULE_NAME] || typeof chat_metadata[MODULE_NAME] !== 'object') {
+            chat_metadata[MODULE_NAME] = {};
+        }
+        chat_metadata[MODULE_NAME].enabled = Boolean(val);
+        saveMetadataDebounced();
+    }
+    refresh_settings();
+    refresh_memory();
+}
+
+function toggle_chat_enabled() {
+    set_chat_enabled(!chat_enabled());
+}
+
+function character_enabled(char_key) {
+    if (!char_key) return true;
+    const context = getContext();
+    if (!context?.groupId) return true;
+    const disabled = extension_settings[MODULE_NAME]?.disabled_group_characters?.[context.groupId];
+    if (Array.isArray(disabled)) {
+        return !disabled.includes(char_key);
+    }
+    return true;
+}
+
+function get_character_key(message) {
+    if (!message) return null;
+    return message.original_avatar || message.avatar || null;
+}
+
+// Connection Profile & Generation
+function get_connection_profiles() {
+    const context = getContext();
+    return context?.chatCompletionSettings?.connection_profiles || [];
+}
+
+function get_connection_profile(id) {
+    return get_connection_profiles().find(p => p.id === id || p.name === id);
+}
+
+function get_active_connection_profile() {
+    const configured_id = get_settings('connection_profile');
+    if (configured_id) {
+        const found = get_connection_profile(configured_id);
+        if (found) return found;
+    }
+    const context = getContext();
+    const active_id = context?.chatCompletionSettings?.active_profile;
+    return get_connection_profile(active_id);
+}
+
+async function summarize_text(messages, profile = null) {
+    const ctx = getContext();
+    if (!ctx) throw new Error("SillyTavern context not available.");
+
+    const conn_profile = profile || get_active_connection_profile();
+    if (ctx.ConnectionManagerRequestService && typeof ctx.ConnectionManagerRequestService.sendRequest === 'function') {
+        const response = await ctx.ConnectionManagerRequestService.sendRequest(conn_profile?.id || conn_profile?.name || '', messages);
+        if (typeof response === 'string') return response.trim();
+        if (response && typeof response === 'object' && response.content) return String(response.content).trim();
+    }
+
+    // Fallback: generateRaw
+    if (typeof generateRaw === 'function') {
+        const prompt_str = Array.isArray(messages) ? messages.map(m => m?.content || '').join('\n\n') : String(messages);
+        const result = await generateRaw(prompt_str, main_api, false, false);
+        return String(result || '').trim();
+    }
+
+    throw new Error("No compatible SillyTavern generation service found.");
+}
+
+// SummaryQueue & Concurrency Management
+class SummaryQueue {
+    tasks = [];
+    active_workers = 0;
+    aborted = false;
+
+    constructor() {
+        this.progress_bar = $(`<div id="${PROGRESS_BAR_ID}" class="memnext_progress_bar" style="display:none;"><div class="progress_bar_fill"></div></div>`);
+    }
+
+    init_ui() {
+        $('#sheld').append(this.progress_bar);
+    }
+
+    add(index) {
+        if (!this.tasks.includes(index)) {
+            this.tasks.push(index);
+        }
+    }
+
+    clear() {
+        this.tasks = [];
+        this.aborted = true;
+        this.hide_progress();
+        this.unblock_chat();
+    }
+
+    show_progress(completed, total) {
+        if (!get_settings('auto_summarize_progress')) return;
+        this.progress_bar.show();
+        const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+        this.progress_bar.find('.progress_bar_fill').css('width', `${percent}%`);
+    }
+
+    hide_progress() {
+        this.progress_bar.hide();
+        this.progress_bar.find('.progress_bar_fill').css('width', `0%`);
+    }
+
+    block_chat() {
+        if (!get_settings('block_chat')) return;
+        $('#send_textarea').prop('disabled', true);
+        $('#send_button').prop('disabled', true);
+    }
+
+    unblock_chat() {
+        $('#send_textarea').prop('disabled', false);
+        $('#send_button').prop('disabled', false);
+    }
+
+    async run() {
+        if (this.tasks.length === 0) return;
+        this.aborted = false;
+        this.block_chat();
+
+        const total = this.tasks.length;
+        let completed = 0;
+        this.show_progress(completed, total);
+
+        const concurrency = Math.max(1, Number(get_settings('parallel_summaries_count')) || 1);
+        const time_delay = Number(get_settings('summarization_time_delay')) || 0;
+
+        const worker = async () => {
+            while (this.tasks.length > 0 && !this.aborted) {
+                const index = this.tasks.shift();
+                if (index === undefined) break;
+
+                try {
+                    await summarize_message(index);
+                } catch (e) {
+                    error(`Error summarizing message [${index}]:`, e);
+                }
+
+                completed++;
+                this.show_progress(completed, total);
+
+                if (time_delay > 0 && this.tasks.length > 0) {
+                    await new Promise(r => setTimeout(r, time_delay * 1000));
+                }
+            }
+        };
+
+        const workers = [];
+        for (let w = 0; w < concurrency; w++) {
+            workers.push(worker());
+        }
+
+        await Promise.allSettled(workers);
+        this.hide_progress();
+        this.unblock_chat();
+        refresh_memory();
+        saveChatDebounced();
+    }
+}
+
+// Single Message Summarization Flow
+async function summarize_message(index, custom_profile = null) {
+    const ctx = getContext();
+    const chat = ctx?.chat;
+    if (!Array.isArray(chat) || !chat[index]) {
+        throw new Error(`Message at index ${index} does not exist.`);
+    }
+
+    const message = chat[index];
+    debug(`Summarizing message ID [${index}]`);
+
+    update_message_visuals(index, true, t`Summarizing...`);
+
+    const prompt_template = get_settings('message_summary_prompt') || default_message_summary_prompt;
+    const words_max = 50;
+
+    let history_str = "";
+    if (index > 0) {
+        const start = Math.max(0, index - 5);
+        history_str = chat.slice(start, index).map(m => `${m.name || (m.is_user ? 'User' : 'Character')}: ${m.mes || ''}`).join('\n');
+    }
+
+    const compiled_prompt = prompt_template
+        .replace(/{{words}}/g, String(words_max))
+        .replace(/{{message}}/g, message.mes || '')
+        .replace(/{{history}}/g, history_str)
+        .replace(/{{char}}/g, ctx.name2 || 'Character')
+        .replace(/{{user}}/g, ctx.name1 || 'User');
+
+    const messages_payload = [
+        { role: 'system', content: compiled_prompt }
+    ];
+
+    try {
+        const result = await summarize_text(messages_payload, custom_profile);
+        set_data(message, 'memory', result);
+        set_data(message, 'hash', getStringHash(message.mes || ''));
+        set_data(message, 'error', null);
+        set_data(message, 'edited', false);
+        update_message_visuals(index);
+        return result;
+    } catch (err) {
+        set_data(message, 'error', String(err));
+        update_message_visuals(index);
+        throw err;
+    }
+}
+
+// Exclusion checking
+function check_message_exclusion(message) {
+    if (!message || typeof message !== 'object') return false;
+    if (get_data(message, 'exclude')) return false;
+    if (!get_settings('include_user_messages') && message.is_user) return false;
+    if (!get_settings('include_system_messages') && message.is_system) return false;
+    if (!get_settings('include_narrator_messages') && message.extra?.type === system_message_types.NARRATOR) return false;
+
+    const char_key = get_character_key(message);
+    if (!character_enabled(char_key)) return false;
+
+    const token_size = count_tokens(message.mes || '');
+    if (token_size < (Number(get_settings('message_length_threshold')) || 0)) {
+        return false;
+    }
+
+    return true;
+}
+
+// Truncation threshold calculation
+let INJECTION_THRESHOLD_INDEX = null;
+
+function get_injection_threshold() {
+    const ctx = getContext();
+    const chat = ctx?.chat;
+    if (!Array.isArray(chat) || chat.length === 0) return 0;
+
+    const type = get_settings('summary_injection_threshold_type');
+    const threshold_val = Number(get_settings('summary_injection_threshold')) || 10;
+    const end = chat.length - 1;
+
+    let base_index = end;
+
+    if (type === 'messages') {
+        base_index = Math.max(0, end - threshold_val);
+    } else if (type === 'tokens') {
+        let accumulated_tokens = 0;
+        for (let i = end; i >= 0; i--) {
+            accumulated_tokens += count_tokens(chat[i]?.mes || '');
+            if (accumulated_tokens >= threshold_val) {
+                base_index = i;
+                break;
+            }
+        }
+    } else if (type === 'context') {
+        const target_tokens = (get_chat_context_size() * threshold_val) / 100;
+        let accumulated_tokens = 0;
+        for (let i = end; i >= 0; i--) {
+            accumulated_tokens += count_tokens(chat[i]?.mes || '');
+            if (accumulated_tokens >= target_tokens) {
+                base_index = i;
+                break;
+            }
+        }
+    }
+
+    const messages_trigger = Number(get_settings('injection_threshold_update_trigger_messages')) || 0;
+
+    let should_update = (INJECTION_THRESHOLD_INDEX === null || INJECTION_THRESHOLD_INDEX >= chat.length);
+    if (!should_update && messages_trigger <= 0) {
+        should_update = true;
+    } else if (!should_update && messages_trigger > 0) {
+        should_update = (base_index - INJECTION_THRESHOLD_INDEX) >= messages_trigger;
+    }
+
+    if (should_update) {
+        INJECTION_THRESHOLD_INDEX = base_index;
+    }
+
+    return INJECTION_THRESHOLD_INDEX;
+}
+
+// Accumulative Memory: Inclusions and Injections
+function update_message_inclusion_flags() {
+    const ctx = getContext();
+    const chat = ctx?.chat;
+    if (!Array.isArray(chat)) return;
+
+    const first_to_inject = get_injection_threshold();
+    const short_token_limit = get_short_token_limit();
+    const sep = get_settings('summary_injection_separator') || "\n* ";
+    const sep_size = count_tokens(sep);
+
+    let accumulated_short_tokens = 0;
+    let short_limit_reached = false;
+    let last_user_found = false;
+
+    for (let i = chat.length - 1; i >= 0; i--) {
+        const message = chat[i];
+        if (!message) continue;
+
+        let lagging = i > first_to_inject;
+
+        if (get_settings('keep_last_user_message') && !last_user_found && message.is_user) {
+            last_user_found = true;
+            lagging = true;
+        }
+
+        set_data(message, 'lagging', lagging);
+
+        if (!check_message_exclusion(message)) {
+            set_data(message, 'include', null);
+            continue;
+        }
+
+        const mem = get_memory(message);
+        if (!mem) {
+            set_data(message, 'include', null);
+            continue;
+        }
+
+        if (!short_limit_reached) {
+            const mem_tokens = count_tokens(mem) + sep_size;
+            if (accumulated_short_tokens + mem_tokens <= short_token_limit) {
+                set_data(message, 'include', 'short');
+                if (!lagging) accumulated_short_tokens += mem_tokens;
+                continue;
+            } else {
+                short_limit_reached = true;
+            }
+        }
+
+        // Beyond short-term budget: belongs to long-term pool
+        set_data(message, 'include', 'long');
+    }
+
+    update_all_message_visuals();
+}
+
+function get_short_memory() {
+    const ctx = getContext();
+    const chat = ctx?.chat;
+    if (!Array.isArray(chat)) return '';
+
+    const sep = get_settings('summary_injection_separator') || "\n* ";
+    const summaries = [];
+
+    for (let i = 0; i < chat.length; i++) {
+        const message = chat[i];
+        if (!message) continue;
+        if (get_data(message, 'include') === 'short') {
+            const mem = get_memory(message);
+            if (mem) summaries.push(mem);
+        }
+    }
+
+    if (summaries.length === 0) return '';
+    const joined = summaries.join(sep);
+    const template = get_settings('short_template') || default_short_template;
+    return template.replace(new RegExp(`{{${generic_memories_macro}}}`, 'g'), joined);
+}
+
+function get_long_memory() {
+    const consolidated = get_chat_long_term_memory();
+    if (!consolidated) return '';
+    const template = get_settings('long_template') || default_long_template;
+    return template.replace(new RegExp(`{{${generic_memories_macro}}}`, 'g'), consolidated);
+}
+
+function refresh_memory() {
+    const ctx = getContext();
+    if (!ctx) return;
+
+    if (!chat_enabled()) {
+        ctx.setExtensionPrompt(`${MODULE_NAME}_long`, "");
+        ctx.setExtensionPrompt(`${MODULE_NAME}_short`, "");
+        return;
+    }
+
+    update_message_inclusion_flags();
+
+    const long_injection = get_long_memory();
+    const short_injection = get_short_memory();
+
+    const position = Number(get_settings('injection_position')) || extension_prompt_types.IN_PROMPT;
+    const role = Number(get_settings('injection_role')) || extension_prompt_roles.SYSTEM;
+
+    ctx.setExtensionPrompt(`${MODULE_NAME}_long`, long_injection, position, 0, false, role);
+    ctx.setExtensionPrompt(`${MODULE_NAME}_short`, short_injection, position, 0, false, role);
+
+    update_context_budget_displays();
+    check_compaction_needed();
+}
+
+const refresh_memory_debounced = debounce(refresh_memory, debounce_timeout.relaxed);
+
+// Compaction Engine Stubs (Phase 1: Architecture ready, LLM batch calls wired for Phase 2)
+function check_compaction_needed() {
+    const free_percent = get_free_context_percent();
+    const threshold = Number(get_settings('compaction_threshold_percent')) || 15;
+    debug(`Checking compaction status: Free space = ${free_percent}%, Threshold = ${threshold}%`);
+
+    if (free_percent < threshold) {
+        debug("Compaction condition triggered (free context space below threshold).");
+        // Phase 2 will trigger batch compaction here
+    }
+}
+
+async function compact_short_to_long() {
+    log("Compaction Stub: compact_short_to_long called. Execution reserved for Phase 2.");
+    toast("Compaction is staged for batch processing (Phase 2).", "info");
+    return true;
+}
+
+async function compact_long_term() {
+    log("Compaction Stub: compact_long_term called. Execution reserved for Phase 2.");
+    return true;
+}
+
+// Generate Interceptor (Truncate Raw Chat Beyond Threshold)
+globalThis.memnext_intercept_messages = function (chat, _contextSize, _abort, type) {
+    if (!chat_enabled()) return;
+    if (!get_settings('exclude_messages_after_threshold')) return;
+    refresh_memory();
+
+    if (!Array.isArray(chat) || chat.length === 0) return;
+
+    const ctx = getContext();
+    const IGNORE_SYMBOL = ctx?.symbols?.ignore || Symbol.for('ignore');
+
+    let start = chat.length - 1;
+    if (type === 'continue') start--;
+
+    for (let i = start; i >= 0; i--) {
+        const message = chat[i];
+        if (!message || typeof message !== 'object') continue;
+        const lagging = get_data(message, 'lagging');
+        chat[i] = structuredClone(chat[i]);
+        chat[i].extra = chat[i].extra || {};
+        chat[i].extra[IGNORE_SYMBOL] = !lagging;
+    }
+};
+
+// UI Rendering & Message Visuals
+function get_message_div(index) {
+    const div = $(`div[mesid="${index}"]`);
+    return div.length > 0 ? div : null;
+}
+
+function update_message_visuals(i, in_progress = false, custom_text = null) {
+    const div = get_message_div(i);
+    if (!div) return;
+
+    div.find(`div.${summary_div_class}`).remove();
+    div.find(`.mes_text`).removeClass(css_removed_message);
+
+    if (!get_settings('display_memories') || !chat_enabled()) return;
+
+    const ctx = getContext();
+    const message = ctx?.chat?.[i];
+    if (!message) return;
+
+    const memory_text = custom_text || get_memory(message);
+    const include = get_data(message, 'include');
+    const lagging = get_data(message, 'lagging');
+
+    if (get_settings('exclude_messages_after_threshold') && !lagging) {
+        div.find(`.mes_text`).addClass(css_removed_message);
+    }
+
+    if (!memory_text) return;
+
+    let style_class = css_message_div;
+    if (include === 'short') {
+        style_class += ` ${css_short_memory}`;
+    } else if (include === 'long') {
+        style_class += ` ${css_long_memory}`;
+    }
+    if (lagging) {
+        style_class += ` ${css_lagging_memory}`;
+    }
+
+    const summary_element = $(`<div class="${summary_div_class} ${style_class}"><i class="fa-solid fa-quote-left" style="margin-right: 5px; opacity: 0.6;"></i><span></span></div>`);
+    summary_element.find('span').text(memory_text);
+
+    div.find('.mes_block').append(summary_element);
+}
+
+function update_all_message_visuals() {
+    const ctx = getContext();
+    const chat = ctx?.chat;
+    if (!Array.isArray(chat)) return;
+    for (let i = 0; i < chat.length; i++) {
+        update_message_visuals(i);
+    }
+}
+
+function update_context_budget_displays() {
+    const context_size = get_chat_context_size();
+    const long_tokens = get_long_token_limit();
+    const short_tokens = get_short_token_limit();
+    const threshold_percent = Number(get_settings('compaction_threshold_percent')) || 15;
+    const threshold_tokens = Math.floor(context_size * (threshold_percent / 100));
+
+    $(`.${settings_content_class} #long_term_context_limit_display`).text(long_tokens);
+    $(`.${settings_content_class} #short_term_context_limit_display`).text(short_tokens);
+    $(`.${settings_content_class} #compaction_threshold_tokens_display`).text(threshold_tokens);
+}
+
+// Auto-summarize chat
+async function auto_summarize_chat() {
+    if (!chat_enabled() || !get_settings('auto_summarize')) return;
+    const ctx = getContext();
+    const chat = ctx?.chat;
+    if (!Array.isArray(chat) || chat.length === 0) return;
+
+    const limit = Number(get_settings('auto_summarize_message_limit'));
+    const start_index = limit === -1 ? 0 : Math.max(0, chat.length - limit);
+
+    const to_summarize = [];
+    for (let i = start_index; i < chat.length; i++) {
+        const message = chat[i];
+        if (!message) continue;
+        if (!check_message_exclusion(message)) continue;
+        if (!get_memory(message)) {
+            to_summarize.push(i);
+        }
+    }
+
+    const batch_size = Number(get_settings('auto_summarize_batch_size')) || 1;
+    if (to_summarize.length >= batch_size) {
+        for (const idx of to_summarize) {
+            summaryQueue.add(idx);
+        }
+        await summaryQueue.run();
+    }
+}
+
+// Chat event router
+async function on_chat_event(event, data = null) {
+    debug(`Handling chat event: ${event}`);
+    switch (event) {
+        case 'user_message':
+        case 'char_message':
+            refresh_memory();
+            await auto_summarize_chat();
+            break;
+        case 'message_edited':
+            if (get_settings('auto_summarize_on_edit') && data !== null) {
+                summaryQueue.add(data);
+                await summaryQueue.run();
+            }
+            refresh_memory();
+            break;
+        case 'message_swiped':
+            if (get_settings('auto_summarize_on_swipe') && data !== null) {
+                summaryQueue.add(data);
+                await summaryQueue.run();
+            }
+            refresh_memory();
+            break;
+        case 'chat_changed':
+            INJECTION_THRESHOLD_INDEX = null;
+            refresh_settings();
+            refresh_memory();
+            break;
+        case 'message_deleted':
+            refresh_memory();
+            break;
+        case 'before_message':
+            if (get_settings('auto_summarize_on_send')) {
+                await auto_summarize_chat();
+            }
+            break;
+    }
+}
+
+// Prompt Edit Modal Interface (Re-usable for all 3 prompts)
+class PromptEditInterface {
+    constructor(config) {
+        this.setting_key = config.setting_key;
+        this.title = config.title;
+        this.description = config.description;
+        this.default_prompt = config.default_prompt;
+        this.ctx = getContext();
+
+        this.html_template = `
+<div id="memnext_prompt_interface" style="height: 100%; display: flex; flex-direction: column;">
+    <div class="flex-container justifyspacebetween alignitemscenter" style="margin-bottom: 10px;">
+        <h3 class="margin0">${this.title}</h3>
+        <i class="fa-solid fa-info-circle" title="${this.description}"></i>
+        <button id="restore_default" class="menu_button fa-solid fa-recycle red_button" title="Restore default prompt" style="margin-left: auto;"></button>
+    </div>
+    <div style="flex: 1; margin-bottom: 10px;">
+        <textarea id="prompt_text" class="text_pole" style="width: 100%; height: 100%; box-sizing: border-box; resize: none; font-family: monospace;"></textarea>
+    </div>
+</div>
+`;
+    }
+
+    async show() {
+        const popup = new this.ctx.Popup(this.html_template, this.ctx.POPUP_TYPE.TEXT, undefined, {
+            wider: true,
+            okButton: 'Save',
+            cancelButton: 'Cancel'
+        });
+
+        const $content = $(popup.content);
+        $content.closest('dialog').css('min-width', '70%');
+        const $textarea = $content.find('#prompt_text');
+        const $restore = $content.find('#restore_default');
+
+        $textarea.val(get_settings(this.setting_key) || this.default_prompt);
+
+        $restore.on('click', () => {
+            $textarea.val(this.default_prompt);
+        });
+
+        const result = await popup.show();
+        if (result) {
+            set_settings(this.setting_key, $textarea.val());
+            toast(`${this.title} saved.`, "success");
+        }
+    }
+}
+
+// Memory State / Edit Table Interface
+class MemoryEditInterface {
+    ctx = getContext();
+
+    constructor() {
+        this.html_template = `
+<div id="memnext_memory_state_interface">
+    <div class="flex-container justifyspacebetween alignitemscenter">
+        <h3>Memory State</h3>
+        <button id="refresh_table" class="menu_button fa-solid fa-sync margin0" title="Refresh Table"></button>
+    </div>
+    <hr>
+    <div id="progress_bar"></div>
+    <table cellspacing="0">
+        <thead>
+            <tr>
+                <th title="Message ID"><i class="fa-solid fa-hashtag"></i></th>
+                <th title="Sender"><i class="fa-solid fa-comment"></i></th>
+                <th title="Summary Text">Summary</th>
+                <th class="actions">Actions</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+    <hr>
+    <div class="flex-container alignitemscenter">
+        <button id="bulk_summarize_all" class="menu_button"><i class="fa-solid fa-quote-left"></i> Summarize All Empty</button>
+    </div>
+</div>
+`;
+    }
+
+    async show() {
+        const popup = new this.ctx.Popup(this.html_template, this.ctx.POPUP_TYPE.TEXT, undefined, { wider: true });
+        const $content = $(popup.content);
+        $content.closest('dialog').css('min-width', '80%');
+
+        const populate = () => {
+            const $tbody = $content.find('tbody').empty();
+            const chat = this.ctx?.chat || [];
+            for (let i = 0; i < chat.length; i++) {
+                const msg = chat[i];
+                if (!msg) continue;
+                const mem = get_memory(msg) || '';
+                const sender = msg.name || (msg.is_user ? 'User' : 'Character');
+
+                const $tr = $(`<tr>
+                    <td>${i}</td>
+                    <td><b>${escape_string(sender)}</b></td>
+                    <td class="memory_text_cell"><span class="mem_display">${escape_string(mem)}</span></td>
+                    <td class="memory_actions_cell">
+                        <button class="menu_button row_summarize fa-solid fa-quote-left" title="Summarize"></button>
+                        <button class="menu_button row_clear fa-solid fa-trash red_button" title="Delete"></button>
+                    </td>
+                </tr>`);
+
+                $tr.find('.row_summarize').on('click', async () => {
+                    await summarize_message(i);
+                    populate();
+                });
+
+                $tr.find('.row_clear').on('click', () => {
+                    set_data(msg, 'memory', null);
+                    populate();
+                    refresh_memory();
+                    saveChatDebounced();
+                });
+
+                $tbody.append($tr);
+            }
+        };
+
+        $content.find('#refresh_table').on('click', populate);
+        $content.find('#bulk_summarize_all').on('click', async () => {
+            const chat = this.ctx?.chat || [];
+            for (let i = 0; i < chat.length; i++) {
+                if (!get_memory(chat[i]) && check_message_exclusion(chat[i])) {
+                    summaryQueue.add(i);
+                }
+            }
+            await summaryQueue.run();
+            populate();
+        });
+
+        populate();
+        await popup.show();
+    }
+}
+
+// UI Initialization & Binding
+let promptInterface1;
+let promptInterface2;
+let promptInterface3;
+let memoryEditInterface;
+let summaryQueue;
+
+function initialize_settings_ui() {
+    const bind_input = (id, key, type) => {
+        const $el = $(`.${settings_content_class} #${id}`);
+        if ($el.length === 0) return;
+        settings_ui_map[key] = [$el, type];
+
+        if (type === 'boolean') {
+            $el.prop('checked', Boolean(get_settings(key)));
+            $el.on('change', function () {
+                set_settings(key, $(this).prop('checked'));
+                refresh_memory();
+            });
+        } else if (type === 'number') {
+            $el.val(get_settings(key));
+            $el.on('change', function () {
+                set_settings(key, Number($(this).val()));
+                refresh_memory();
+            });
+        } else {
+            $el.val(get_settings(key));
+            $el.on('change', function () {
+                set_settings(key, $(this).val());
+                refresh_memory();
+            });
+        }
+    };
+
+    // Bind settings
+    bind_input('auto_summarize', 'auto_summarize', 'boolean');
+    bind_input('auto_summarize_on_edit', 'auto_summarize_on_edit', 'boolean');
+    bind_input('auto_summarize_on_swipe', 'auto_summarize_on_swipe', 'boolean');
+    bind_input('auto_summarize_on_continue', 'auto_summarize_on_continue', 'boolean');
+    bind_input('block_chat', 'block_chat', 'boolean');
+    bind_input('auto_summarize_progress', 'auto_summarize_progress', 'boolean');
+    bind_input('auto_summarize_on_send', 'auto_summarize_on_send', 'boolean');
+    bind_input('auto_summarize_block_generation', 'auto_summarize_block_generation', 'boolean');
+    bind_input('exclude_messages_after_threshold', 'exclude_messages_after_threshold', 'boolean');
+    bind_input('keep_last_user_message', 'keep_last_user_message', 'boolean');
+    bind_input('include_user_messages', 'include_user_messages', 'boolean');
+    bind_input('include_system_messages', 'include_system_messages', 'boolean');
+    bind_input('include_narrator_messages', 'include_narrator_messages', 'boolean');
+    bind_input('debug_mode', 'debug_mode', 'boolean');
+    bind_input('display_memories', 'display_memories', 'boolean');
+    bind_input('default_chat_enabled', 'default_chat_enabled', 'boolean');
+    bind_input('use_global_toggle_state', 'use_global_toggle_state', 'boolean');
+    bind_input('summarization_time_delay_skip_first', 'summarization_time_delay_skip_first', 'boolean');
+
+    bind_input('parallel_summaries_count', 'parallel_summaries_count', 'number');
+    bind_input('summarization_time_delay', 'summarization_time_delay', 'number');
+    bind_input('summarization_delay', 'summarization_delay', 'number');
+    bind_input('auto_summarize_batch_size', 'auto_summarize_batch_size', 'number');
+    bind_input('auto_summarize_message_limit', 'auto_summarize_message_limit', 'number');
+    bind_input('long_term_context_limit', 'long_term_context_limit', 'number');
+    bind_input('short_term_context_limit', 'short_term_context_limit', 'number');
+    bind_input('compaction_threshold_percent', 'compaction_threshold_percent', 'number');
+    bind_input('summary_injection_threshold', 'summary_injection_threshold', 'number');
+    bind_input('message_length_threshold', 'message_length_threshold', 'number');
+    bind_input('injection_threshold_update_trigger_messages', 'injection_threshold_update_trigger_messages', 'number');
+    bind_input('injection_threshold_update_trigger_summaries', 'injection_threshold_update_trigger_summaries', 'number');
+    bind_input('injection_threshold_update_trigger_context', 'injection_threshold_update_trigger_context', 'number');
+
+    bind_input('summary_injection_separator', 'summary_injection_separator', 'text');
+    bind_input('summary_injection_threshold_type', 'summary_injection_threshold_type', 'text');
+    bind_input('injection_position', 'injection_position', 'number');
+    bind_input('injection_role', 'injection_role', 'number');
+
+    // Prompt Edit buttons
+    $(`.${settings_content_class} #edit_message_summary_prompt`).on('click', () => promptInterface1.show());
+    $(`.${settings_content_class} #edit_short_to_long_prompt`).on('click', () => promptInterface2.show());
+    $(`.${settings_content_class} #edit_long_compaction_prompt`).on('click', () => promptInterface3.show());
+
+    // Top action buttons
+    $(`.${settings_content_class} #toggle_chat_memory`).on('click', toggle_chat_enabled);
+    $(`.${settings_content_class} #edit_memory_state`).on('click', () => memoryEditInterface.show());
+    $(`.${settings_content_class} #refresh_memory`).on('click', () => {
+        refresh_memory();
+        toast("Memories refreshed.", "info");
+    });
+    $(`.${settings_content_class} #stop_summarization`).on('click', () => {
+        summaryQueue.clear();
+        toast("Summarization stopped.", "warning");
+    });
+    $(`.${settings_content_class} #summarize_all_messages`).on('click', async () => {
+        const ctx = getContext();
+        const chat = ctx?.chat || [];
+        for (let i = 0; i < chat.length; i++) {
+            if (!get_memory(chat[i]) && check_message_exclusion(chat[i])) {
+                summaryQueue.add(i);
+            }
+        }
+        toast(`Queued ${summaryQueue.tasks.length} messages for summarization.`, "info");
+        await summaryQueue.run();
+    });
+    $(`.${settings_content_class} #clear_long_term_memory`).on('click', () => {
+        set_chat_long_term_memory("");
+        refresh_memory();
+        toast("Long-term memory cleared for this chat.", "info");
+    });
+    $(`.${settings_content_class} #revert_settings`).on('click', () => {
+        const profile = get_settings('profile');
+        if (extension_settings[MODULE_NAME]?.profiles?.[profile]) {
+            extension_settings[MODULE_NAME].profiles[profile] = structuredClone(default_settings);
+            refresh_settings();
+            refresh_memory();
+            toast("Profile reverted to default.", "success");
+        }
+    });
+
+    update_connection_profile_dropdown();
+    refresh_settings();
+}
+
+function update_connection_profile_dropdown() {
+    const $dropdown = $(`.${settings_content_class} #connection_profile`).empty();
+    $dropdown.append(`<option value="">Current Tavern Connection</option>`);
+    const profiles = get_connection_profiles();
+    for (const p of profiles) {
+        $dropdown.append(`<option value="${p.id}">${escape_string(p.name)}</option>`);
+    }
+    $dropdown.val(get_settings('connection_profile') || '');
+    $dropdown.on('change', function () {
+        set_settings('connection_profile', $(this).val());
+    });
+}
+
+function refresh_settings() {
+    for (const [key, [element, type]] of Object.entries(settings_ui_map)) {
+        if (!element || element.length === 0) continue;
+        const val = get_settings(key);
+        if (type === 'boolean') {
+            element.prop('checked', Boolean(val));
+        } else {
+            element.val(val);
+        }
+    }
+    const enabled = chat_enabled();
+    $(`.${settings_content_class} #toggle_chat_memory span`).text(enabled ? t`Memory: Enabled` : t`Memory: Disabled`);
+    $(`.${settings_content_class} #toggle_chat_memory`).toggleClass('button_highlight', enabled);
+
+    update_context_budget_displays();
+}
+
+// In-chat Message Buttons
+function initialize_message_buttons() {
+    const message_buttons_template = `
+<div class="${css_button_separator}"></div>
+<div class="mes_button fa-solid fa-quote-left ${summarize_button_class}" title="Summarize message (MemNext)"></div>
+<div class="mes_button fa-solid fa-pencil ${edit_button_class}" title="Edit summary (MemNext)"></div>
+<div class="mes_button fa-solid fa-trash ${forget_button_class}" title="Delete summary (MemNext)"></div>
+`;
+
+    // Hook dynamically added message extra buttons
+    $(document).on('click', `.${summarize_button_class}`, async function () {
+        const mes_id = Number($(this).closest('.mes').attr('mesid'));
+        if (!isNaN(mes_id)) {
+            await summarize_message(mes_id);
+            refresh_memory();
+            saveChatDebounced();
+        }
+    });
+
+    $(document).on('click', `.${forget_button_class}`, function () {
+        const mes_id = Number($(this).closest('.mes').attr('mesid'));
+        if (!isNaN(mes_id)) {
+            const ctx = getContext();
+            const msg = ctx?.chat?.[mes_id];
+            if (msg) {
+                set_data(msg, 'memory', null);
+                update_message_visuals(mes_id);
+                refresh_memory();
+                saveChatDebounced();
+            }
+        }
+    });
+
+    $(document).on('click', `.${edit_button_class}`, function () {
+        const mes_div = $(this).closest('.mes');
+        const mes_id = Number(mes_div.attr('mesid'));
+        if (isNaN(mes_id)) return;
+
+        const ctx = getContext();
+        const msg = ctx?.chat?.[mes_id];
+        if (!msg) return;
+
+        const current_mem = get_memory(msg) || '';
+        const $edit_box = $(`<textarea class="${css_edit_textarea} text_pole"></textarea>`).val(current_mem);
+
+        const summary_div = mes_div.find(`div.${summary_div_class}`);
+        if (summary_div.length > 0) {
+            summary_div.replaceWith($edit_box);
+        } else {
+            mes_div.find('.mes_block').append($edit_box);
+        }
+
+        $edit_box.focus();
+        $edit_box.on('blur', function () {
+            const new_text = $(this).val().trim();
+            set_data(msg, 'memory', new_text || null);
+            set_data(msg, 'edited', true);
+            $edit_box.remove();
+            update_message_visuals(mes_id);
+            refresh_memory();
+            saveChatDebounced();
+        });
+    });
+
+    // Observe and inject buttons into message hover panels
+    const observer = new MutationObserver(mutations => {
+        for (const mutation of mutations) {
+            for (const node of mutation.addedNodes) {
+                if (node.nodeType === 1 && node.classList.contains('extraMesButtons')) {
+                    const $buttons = $(node);
+                    if ($buttons.find(`.${summarize_button_class}`).length === 0) {
+                        $buttons.append(message_buttons_template);
+                    }
+                }
+            }
+        }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+}
+
+// Slash commands
+function initialize_slash_commands() {
+    const ctx = getContext();
+    const SlashCommandParser = ctx?.SlashCommandParser;
+    const SlashCommand = ctx?.SlashCommand;
+    if (!SlashCommandParser || !SlashCommand) return;
+
+    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+        name: 'memnext-toggle',
+        callback: () => {
+            toggle_chat_enabled();
+            return `MemNext is now ${chat_enabled() ? 'enabled' : 'disabled'}.`;
+        },
+        helpString: 'Toggle MemNext on or off for the current chat.'
+    }));
+
+    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+        name: 'memnext-refresh',
+        callback: () => {
+            refresh_memory();
+            return 'MemNext memory state refreshed.';
+        },
+        helpString: 'Recalculate inclusion boundaries and refresh injections.'
+    }));
+
+    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+        name: 'memnext-summarize',
+        callback: async (args) => {
+            const ctx = getContext();
+            const last = ctx?.chat?.length ? ctx.chat.length - 1 : 0;
+            const index = args?.index !== undefined ? Number(args.index) : last;
+            await summarize_message(index);
+            return `Summarized message ID ${index}.`;
+        },
+        helpString: 'Summarize a message by index (defaults to latest message).'
+    }));
+
+    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+        name: 'memnext-summarize-all',
+        callback: async () => {
+            const ctx = getContext();
+            const chat = ctx?.chat || [];
+            let count = 0;
+            for (let i = 0; i < chat.length; i++) {
+                if (!get_memory(chat[i]) && check_message_exclusion(chat[i])) {
+                    summaryQueue.add(i);
+                    count++;
+                }
+            }
+            void summaryQueue.run();
+            return `Queued ${count} unsummarized messages for processing.`;
+        },
+        helpString: 'Summarize all unsummarized messages from the start of the chat.'
+    }));
+
+    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+        name: 'memnext-clear-long',
+        callback: () => {
+            set_chat_long_term_memory('');
+            refresh_memory();
+            return 'Long-term consolidated memory cleared.';
+        },
+        helpString: 'Clear consolidated long-term narrative for the active chat.'
+    }));
+
+    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+        name: 'memnext-compact',
+        callback: async () => {
+            await compact_short_to_long();
+            return 'Compaction executed (Phase 2 staged).';
+        },
+        helpString: 'Trigger manual batch compaction of memory blocks.'
+    }));
+}
+
+// Popout logic
+let POPOUT_VISIBLE = false;
+let $popout = null;
+let $settings_element = null;
+let $original_settings_parent = null;
+
+function initialize_popout() {
+    $settings_element = $(`.${settings_content_class}`);
+    $original_settings_parent = $settings_element.parent();
+
+    $(`.${settings_content_class} #memnext_popout_button`).on('click', () => {
+        if (POPOUT_VISIBLE) {
+            $popout.fadeOut(animation_duration, () => {
+                $settings_element.appendTo($original_settings_parent);
+                $popout.remove();
+                POPOUT_VISIBLE = false;
+            });
+        } else {
+            $popout = $('<div id="memnextExtensionPopout" class="draggable-dialog" style="display:none; position:fixed; top:100px; left:100px; z-index:99999; background:var(--SmartThemeBlurTintColor); border:1px solid black; padding:15px; border-radius:10px; box-shadow:0 0 10px rgba(0,0,0,0.5);"></div>');
+            $popout.appendTo(document.body);
+            $settings_element.appendTo($popout);
+            $popout.fadeIn(animation_duration);
+            if (typeof dragElement === 'function') {
+                dragElement($popout);
+            }
+            POPOUT_VISIBLE = true;
+        }
+    });
+}
+
+// Entry Point
+jQuery(async function () {
+    log(`Loading ${MODULE_NAME_FANCY} extension...`);
+
+    initialize_settings();
+
+    promptInterface1 = new PromptEditInterface({
+        setting_key: 'message_summary_prompt',
+        title: 'Message Summary Prompt',
+        description: 'Template used to summarize single messages.',
+        default_prompt: default_message_summary_prompt
+    });
+
+    promptInterface2 = new PromptEditInterface({
+        setting_key: 'short_to_long_prompt',
+        title: 'Short \u2192 Long Compaction Prompt',
+        description: 'Template used to consolidate graduating short-term memories into the long-term narrative.',
+        default_prompt: default_short_to_long_prompt
+    });
+
+    promptInterface3 = new PromptEditInterface({
+        setting_key: 'long_compaction_prompt',
+        title: 'Long-Term Compaction Prompt',
+        description: 'Template used to re-compact the long-term narrative when it approaches its token limit.',
+        default_prompt: default_long_compaction_prompt
+    });
+
+    memoryEditInterface = new MemoryEditInterface();
+    summaryQueue = new SummaryQueue();
+    summaryQueue.init_ui();
+
+    // Fetch and inject settings.html
+    try {
+        const index_url = new URL(import.meta.url);
+        const settings_url = new URL('settings.html', index_url).href;
+        const html = await $.get(settings_url);
+        $('#extensions_settings2').append(html);
+    } catch (e) {
+        error("Could not load settings.html:", e);
+    }
+
+    initialize_settings_ui();
+    initialize_popout();
+    initialize_message_buttons();
+    initialize_slash_commands();
+
+    // Global macros registration
+    MacrosParser.registerMacro(short_memory_macro, () => get_short_memory(), 'MemNext Short-Term Memory');
+    MacrosParser.registerMacro(long_memory_macro, () => get_long_memory(), 'MemNext Long-Term Memory');
+
+    // Event listeners
+    const ctx = getContext();
+    const eventSource = ctx?.eventSource;
+    const event_types = ctx?.eventTypes || ctx?.event_types;
+
+    if (eventSource && event_types) {
+        eventSource.makeLast(event_types.CHARACTER_MESSAGE_RENDERED, (id) => on_chat_event('char_message', id));
+        eventSource.on(event_types.USER_MESSAGE_RENDERED, (id) => on_chat_event('user_message', id));
+        eventSource.on(event_types.MESSAGE_DELETED, (id) => on_chat_event('message_deleted', id));
+        eventSource.on(event_types.MESSAGE_EDITED, (id) => on_chat_event('message_edited', id));
+        eventSource.on(event_types.MESSAGE_SWIPED, (id) => on_chat_event('message_swiped', id));
+        eventSource.on(event_types.CHAT_CHANGED, () => on_chat_event('chat_changed'));
+        eventSource.on(event_types.MORE_MESSAGES_LOADED, refresh_memory);
+        eventSource.on(event_types.GENERATION_STARTED, (type, _params, isDryRun) => on_chat_event('before_message', { type, isDryRun }));
+    }
+
+    refresh_memory();
+    log(`${MODULE_NAME_FANCY} loaded successfully.`);
+});

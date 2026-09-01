@@ -1,0 +1,318 @@
+<div id="memnext_settings" class="memnext_settings_content">
+    <div class="inline-drawer">
+
+        <div class="inline-drawer-toggle inline-drawer-header">
+            <div class="flex-container alignitemscenter margin0">
+                <b id="memnext_title" title="MemNext: Accumulative Memory Extension">MemNext</b>
+                <i id="memnext_popout_button" title="Move config to floating popout" class="fa-solid fa-window-restore menu_button margin0"></i>
+            </div>
+            <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+        </div>
+
+        <div class="inline-drawer-content">
+
+            <!-- transferred to popup -->
+            <div class="memnext_settings_content">
+                <hr>
+
+                <div class="flex-container justifyspacebetween alignitemscenter">
+                    <button id="toggle_chat_memory" class="menu_button flex2" title="Toggle whether memory is enabled for this chat specifically (overrides all settings)."><span>Toggle Memory</span></button>
+                    <button id="edit_memory_state" class="menu_button flex2" title="Edit the memories in chat."><span>Edit Memory</span></button>
+                    <button id="refresh_memory" class="menu_button fa-solid fa-sync margin0" title="Refreshes inclusion flags and re-renders memory display."></button>
+                </div>
+
+                <hr>
+
+                <div>
+                    <div class="flex-container justifyspacebetween alignitemscenter" style="margin: auto; width: fit-content;">
+                        <h4 class="textAlignCenter">Configuration Profiles</h4>
+                        <button id="import_profile" class="menu_button fa-solid fa-file-import" title="Import a config profile"></button>
+                        <button id="export_profile" class="menu_button fa-solid fa-file-export" title="Export the last saved version of the current profile"></button>
+                        <input id="import_file" type="file" hidden="" accept=".json">
+                    </div>
+                </div>
+
+                <div class="flex-container justifyspacebetween alignitemscenter">
+                    <select id="profile" class="flex1 text_pole" title="The currently selected profile"></select>
+                    <button id="save_profile" class="menu_button fa-solid fa-save interactable" title="Save current profile" tabindex="0"></button>
+                    <button id="rename_profile" class="menu_button fa-solid fa-pencil interactable" title="Rename current profile" tabindex="0"></button>
+                    <button id="new_profile" class="menu_button fa-solid fa-file-circle-plus interactable" title="Create new profile" tabindex="0"></button>
+                    <button id="restore_profile" class="menu_button fa-solid fa-recycle interactable" title="Restore current profile" tabindex="0"></button>
+                    <button id="delete_profile" class="menu_button fa-solid fa-trash-can interactable" title="Delete current profile" tabindex="0"></button>
+                </div>
+                <div class="flex-container justifyspacebetween alignitemscenter">
+                    <button id="character_profile" class="menu_button interactable" title="Auto-load profile for current character or group" tabindex="0"><i class="fa-solid fa-unlock" style="margin-right: 1em"></i>Character</button>
+                    <button id="chat_profile" class="menu_button interactable" title="Auto-load profile for current chat" tabindex="0"><i class="fa-solid fa-unlock" style="margin-right: 1em"></i>Chat</button>
+                    <label class="checkbox_label" title="Show a notification upon switching profiles">
+                        <input id="notify_on_profile_switch" type="checkbox" />
+                        <span>Notify on Switch</span>
+                    </label>
+                </div>
+
+                <!-- Prompt Templates (3 Windows) -->
+                <hr>
+                <h4 class="textAlignCenter">Prompt Templates <i class="fa-solid fa-info-circle" title="Three separate prompt templates: message summary, short-to-long compaction, and long-term consolidation."></i></h4>
+                <div class="flex-container justifyspacebetween alignitemscenter" style="margin-bottom: 5px;">
+                    <span class="flex2" style="font-weight: 500;">1. Message Summary Prompt</span>
+                    <button id="edit_message_summary_prompt" class="menu_button flex1" title="Edit prompt used to summarize individual messages">Edit</button>
+                </div>
+                <div class="flex-container justifyspacebetween alignitemscenter" style="margin-bottom: 5px;">
+                    <span class="flex2" style="font-weight: 500;">2. Short &rarr; Long Compaction</span>
+                    <button id="edit_short_to_long_prompt" class="menu_button flex1" title="Edit prompt used to compact short-term summaries into long-term narrative">Edit</button>
+                </div>
+                <div class="flex-container justifyspacebetween alignitemscenter" style="margin-bottom: 5px;">
+                    <span class="flex2" style="font-weight: 500;">3. Long-Term Re-compaction</span>
+                    <button id="edit_long_compaction_prompt" class="menu_button flex1" title="Edit prompt used to re-compact long-term memory when budget overflows">Edit</button>
+                </div>
+
+                <!-- Summarization API & Execution -->
+                <hr>
+                <h4 class="textAlignCenter">Summarization Connection <i class="fa-solid fa-info-circle" title="Connection profile and concurrency settings."></i></h4>
+                <table>
+                    <tr title="The connection profile to use for summaries.">
+                        <td><span>Connection Profile</span></td>
+                        <td><select id="connection_profile" class="text_pole"></select></td>
+                    </tr>
+                </table>
+
+                <label title="Editing a message will trigger a re-summarization if it has already been summarized." class="checkbox_label">
+                    <input id="auto_summarize_on_edit" type="checkbox" />
+                    <span>Re-summarize on Edit</span>
+                </label>
+
+                <label title="Swiping a message will trigger a re-summarization if it has already been summarized." class="checkbox_label">
+                    <input id="auto_summarize_on_swipe" type="checkbox" />
+                    <span>Re-summarize on Swipe</span>
+                </label>
+
+                <label title="Continuing a message will trigger a re-summarization if it has already been summarized." class="checkbox_label">
+                    <input id="auto_summarize_on_continue" type="checkbox" />
+                    <span>Re-summarize on Continue</span>
+                </label>
+
+                <label title="Block chat input while summarizing." class="checkbox_label">
+                    <input id="block_chat" type="checkbox" />
+                    <span>Block Chat</span>
+                </label>
+
+                <label class="checkbox_label" title="Number of API requests to send in parallel (1 = strictly sequential).">
+                    <input id="parallel_summaries_count" class="text_pole widthUnset inline_setting" type="number" min="1" max="999" />
+                    <span>Parallel summaries</span>
+                </label>
+
+                <div class="flex-container justifyspacebetween alignitemscenter">
+                    <label class="checkbox_label" title="Time in seconds to wait before summarizing. Useful for rate-limited APIs.">
+                        <input id="summarization_time_delay" class="text_pole widthUnset inline_setting" type="number" min="0" max="999" />
+                        <span>Time Delay (s)</span>
+                    </label>
+                    <label class="checkbox_label" title="When auto-summarizing, don't delay the first summary right after a character message.">
+                        <input id="summarization_time_delay_skip_first" type="checkbox"/>
+                        <span>Skip First</span>
+                    </label>
+                </div>
+
+                <hr>
+                <h4 class="textAlignCenter">Auto-Summarization <i class="fa-solid fa-info-circle" title="Automatically summarize messages from dialogue start."></i></h4>
+
+                <label class="checkbox_label" title="Enable / Disable automatic summarization.">
+                    <input id="auto_summarize" type="checkbox" />
+                    <span>Auto Summarize</span>
+                </label>
+
+                <label class="checkbox_label" title="Auto-summarization will be triggered before generation instead of after.">
+                    <input id="auto_summarize_on_send" type="checkbox" />
+                    <span>Before Generation</span>
+                </label>
+
+                <label class="checkbox_label" title="Chat generations will wait until auto-summarization finishes.">
+                    <input id="auto_summarize_block_generation" type="checkbox" />
+                    <span>Block Generation</span>
+                </label>
+
+                <label title="Show the progress bar when auto-summarizing." class="checkbox_label">
+                    <input id="auto_summarize_progress" type="checkbox" />
+                    <span>Progress Bar</span>
+                </label>
+
+                <label class="checkbox_label" title="Number of valid messages to wait before auto-summarizing (0 = summarize up to newest).">
+                    <input id="summarization_delay" class="text_pole widthUnset inline_setting" type="number" min="0" max="999" />
+                    <span>Message Lag</span>
+                </label>
+
+                <label class="checkbox_label" title="Wait until this many valid messages before auto-summarizing them all in batch.">
+                    <input id="auto_summarize_batch_size" class="text_pole widthUnset inline_setting" type="number" min="1" max="999" />
+                    <span>Batch Size</span>
+                </label>
+
+                <label class="checkbox_label" title="Maximum lookback messages to summarize (-1 = check whole dialogue from start).">
+                    <input id="auto_summarize_message_limit" class="text_pole widthUnset inline_setting" type="number" min="-1" max="9999" />
+                    <span>Message Limit (-1 = all)</span>
+                </label>
+
+                <div class="flex-container justifyspacebetween alignitemscenter" style="margin-top: 5px;">
+                    <button id="summarize_all_messages" class="menu_button flex1" title="Summarize all unsummarized messages in the current chat from beginning to end.">
+                        <span>Summarize Entire Chat</span>
+                    </button>
+                    <button id="stop_summarization" class="menu_button fa-solid fa-stop margin0" title="Stop all active summarization immediately."></button>
+                </div>
+
+                <!-- Accumulative Memory Budgets & Free Space -->
+                <hr>
+                <h4 class="textAlignCenter">Accumulative Memory Budgets <i class="fa-solid fa-info-circle" title="Configure context budgets for Long-Term narrative and Short-Term rolling summaries."></i></h4>
+
+                <div style="margin-bottom: 8px;">
+                    <label title="The max percentage of max context allocated to Long-Term consolidated memory.">
+                        <span>Long-Term Budget: </span>
+                        <input id="long_term_context_limit" class="text_pole widthUnset inline_setting" type="number" min="1" max="50" />
+                        <span> % (&asymp; <span id="long_term_context_limit_display">0</span> tk)</span>
+                    </label>
+                </div>
+
+                <div style="margin-bottom: 8px;">
+                    <label title="The max percentage of max context allocated to Short-Term rolling summaries.">
+                        <span>Short-Term Budget: </span>
+                        <input id="short_term_context_limit" class="text_pole widthUnset inline_setting" type="number" min="1" max="50" />
+                        <span> % (&asymp; <span id="short_term_context_limit_display">0</span> tk)</span>
+                    </label>
+                </div>
+
+                <div style="margin-bottom: 8px;">
+                    <label title="Trigger batch compaction when free space in context drops below this percentage of max context.">
+                        <span>Compaction Free Space Trigger: &lt; </span>
+                        <input id="compaction_threshold_percent" class="text_pole widthUnset inline_setting" type="number" min="5" max="50" />
+                        <span> % (&asymp; <span id="compaction_threshold_tokens_display">0</span> tk)</span>
+                    </label>
+                </div>
+
+                <!-- Injection & Cache Preservation -->
+                <hr>
+                <h4 class="textAlignCenter">Injection &amp; KV Cache <i class="fa-solid fa-info-circle" title="Injected after system prompt to preserve model attention and maintain prompt cache coherence."></i></h4>
+
+                <label title="Separator between summaries when injected into context." class="checkbox_label">
+                    <input id="summary_injection_separator" class="text_pole" type="text" style="width: 3.5em">
+                    <span>Summary Separator</span>
+                </label>
+
+                <label title="Threshold determining how many recent messages remain in raw chat before summaries take over." class="checkbox_label">
+                    <input id="summary_injection_threshold" class="text_pole inline_setting" type="number" min="0" max="999" />
+                    <select id="summary_injection_threshold_type" class="text_pole inline_setting">
+                        <option value="messages" title="Threshold is placed after this many messages">msg</option>
+                        <option value="tokens" title="Threshold is placed after this many tokens">tk</option>
+                        <option value="context" title="Threshold is placed after this percent of max context">%</option>
+                    </select>
+                    <span>Raw Chat Reserve</span>
+                </label>
+
+                <label title="All messages beyond the raw chat threshold will be hidden from the active chat prompt (replaced by summary injections)." class="checkbox_label">
+                    <input id="exclude_messages_after_threshold" type="checkbox">
+                    <span>Truncate Raw Chat Beyond Threshold</span>
+                </label>
+
+                <label title="This will keep the most recent user message in raw chat context." class="checkbox_label">
+                    <input id="keep_last_user_message" type="checkbox">
+                    <span>Keep Last User Msg</span>
+                </label>
+
+                <label style="margin: 0.2em" title="Freezes the threshold position to reduce context changes and preserve KV cache for local models.">
+                    <span>Cache Preservation Triggers:</span>
+                </label>
+                <div style="margin-left: 1em">
+                    <label title="Update threshold when this many new messages are sent (0 = disabled)">
+                        <input id="injection_threshold_update_trigger_messages" class="text_pole inline_setting" type="number" min="0" max="999" />
+                        <span>new messages</span>
+                    </label>
+                    <br>
+                    <label title="Update threshold when this many new summaries are added (0 = disabled)">
+                        <input id="injection_threshold_update_trigger_summaries" class="text_pole inline_setting" type="number" min="0" max="999" />
+                        <span>new summaries</span>
+                    </label>
+                    <br>
+                    <label title="Update threshold when prompt reaches this percent of max context (0 = disabled)">
+                        <input id="injection_threshold_update_trigger_context" class="text_pole inline_setting" type="number" min="0" max="999" />
+                        <span>% context reached</span>
+                    </label>
+                </div>
+
+                <div style="margin-top: 8px;">
+                    <label title="Where memories are injected. Default is In-Prompt (immediately after System Prompt)." class="checkbox_label">
+                        <span>Injection Position: </span>
+                        <select id="injection_position" class="text_pole inline_setting">
+                            <option value="0" selected>After Main Prompt (Post-System)</option>
+                            <option value="2">Before Main Prompt</option>
+                            <option value="1">In Chat (Depth)</option>
+                            <option value="-1">Macro Only</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div style="margin-top: 4px;">
+                    <label title="Role for injected memory prompts." class="checkbox_label">
+                        <span>Role: </span>
+                        <select id="injection_role" class="text_pole inline_setting">
+                            <option value="0" selected>System</option>
+                            <option value="1">User</option>
+                            <option value="2">Assistant</option>
+                        </select>
+                    </label>
+                </div>
+
+                <!-- Inclusion criteria -->
+                <hr>
+                <h4 class="textAlignCenter">Message Inclusion Criteria <i class="fa-solid fa-info-circle" title="Filters for which messages are summarized."></i></h4>
+
+                <label title="Auto-summarize user messages and include in memory." class="checkbox_label">
+                    <input id="include_user_messages" type="checkbox" />
+                    <span>Include User Messages</span>
+                </label>
+
+                <label title="Auto-summarize hidden/system messages." class="checkbox_label">
+                    <input id="include_system_messages" type="checkbox" />
+                    <span>Include Hidden Messages</span>
+                </label>
+
+                <label title="Auto-summarize narrator messages (e.g., from /sys command)." class="checkbox_label">
+                    <input id="include_narrator_messages" type="checkbox" />
+                    <span>Include Narrator Messages</span>
+                </label>
+
+                <label title="Minimum token length for a message to qualify for summarization.">
+                    <span>Minimum Token Length: </span>
+                    <input id="message_length_threshold" class="text_pole widthUnset inline_setting" type="number" min="0" max="999" />
+                </label>
+
+                <!-- Misc -->
+                <hr>
+                <h4 class="textAlignCenter">Misc</h4>
+                <label title="Verbose console logging for debugging." class="checkbox_label">
+                    <input id="debug_mode" type="checkbox" />
+                    <span>Debug Mode</span>
+                </label>
+
+                <label title="Display summaries directly beneath messages in chat." class="checkbox_label">
+                    <input id="display_memories" type="checkbox" />
+                    <span>Display Summaries in Chat</span>
+                </label>
+
+                <label title="Enable MemNext by default in newly created chats." class="checkbox_label">
+                    <input id="default_chat_enabled" type="checkbox" />
+                    <span>Enabled in New Chats</span>
+                </label>
+
+                <label title="Share active/inactive toggle state globally across chats." class="checkbox_label">
+                    <input id="use_global_toggle_state" type="checkbox" />
+                    <span>Use Global Toggle State</span>
+                </label>
+
+                <div class="flex-container justifyspacebetween alignitemscenter" style="margin-top: 10px;">
+                    <button id="clear_long_term_memory" class="menu_button flex1" title="Clear current chat's consolidated long-term memory narrative.">
+                        <span>Clear Long-Term Memory</span>
+                    </button>
+                    <button id="revert_settings" class="menu_button flex1" title="Revert all settings in current profile to factory defaults.">
+                        <span>Revert Settings</span>
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,13 @@
+{
+    "display_name": "MemNext",
+    "loading_order": 1,
+    "requires": [],
+    "optional": [],
+    "minimum_client_version": "1.14.0",
+    "js": "index.js",
+    "css": "style.css",
+    "author": "dk4AAD",
+    "version": "1.0.0",
+    "homePage": "https://github.com/dk4AAD/SillyTavern-MemNext.git",
+    "generate_interceptor": "memnext_intercept_messages"
+}
