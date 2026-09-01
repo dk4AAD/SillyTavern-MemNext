@@ -1608,28 +1608,60 @@ let $popout = null;
 let $settings_element = null;
 let $original_settings_parent = null;
 
+const settings_div_id = 'memnext_settings';
+
 function initialize_popout() {
-    $settings_element = $(`.${settings_content_class}`);
+    $settings_element = $(`#${settings_div_id}`).find(`.inline-drawer-content .${settings_content_class}`);
     $original_settings_parent = $settings_element.parent();
 
-    $(`.${settings_content_class} #memnext_popout_button`).on('click', () => {
+    $popout = $($('#zoomed_avatar_template').html());
+    $popout.attr('id', 'memnextExtensionPopout').removeClass('zoomed_avatar').addClass('draggable').empty();
+
+    const controlBarHtml = `<div class="panelControlBar flex-container" id="memnextExtensionPopoutheader">
+    <div class="fa-solid fa-grip drag-grabber hoverglow"></div>
+    <div class="fa-solid fa-circle-xmark hoverglow dragClose"></div>
+    </div>`;
+    $popout.append(controlBarHtml);
+
+    if (typeof loadMovingUIState === 'function') loadMovingUIState();
+    if (typeof dragElement === 'function') dragElement($popout);
+
+    $(`.${settings_content_class} #memnext_popout_button`).on('click', (e) => {
+        e.stopPropagation();
         if (POPOUT_VISIBLE) {
-            $popout.fadeOut(animation_duration, () => {
-                $settings_element.appendTo($original_settings_parent);
-                $popout.remove();
-                POPOUT_VISIBLE = false;
-            });
+            close_popout();
         } else {
-            $popout = $('<div id="memnextExtensionPopout" class="draggable-dialog" style="display:none; position:fixed; top:100px; left:100px; z-index:99999; background:var(--SmartThemeBlurTintColor); border:1px solid black; padding:15px; border-radius:10px; box-shadow:0 0 10px rgba(0,0,0,0.5);"></div>');
-            $popout.appendTo(document.body);
-            $settings_element.appendTo($popout);
-            $popout.fadeIn(animation_duration);
-            if (typeof dragElement === 'function') {
-                dragElement($popout);
-            }
-            POPOUT_VISIBLE = true;
+            open_popout();
         }
     });
+
+    $(document).on('keydown', async function (event) {
+        if (event.key === 'Escape' && POPOUT_VISIBLE) {
+            close_popout();
+        }
+    });
+}
+
+function open_popout() {
+    $('body').append($popout);
+    if (typeof loadMovingUIState === 'function') loadMovingUIState();
+    if (typeof dragElement === 'function') dragElement($popout);
+
+    $popout.find('.dragClose').off('click').on('click', function () {
+        close_popout();
+    });
+
+    $settings_element.appendTo($popout);
+    $popout.fadeIn(animation_duration);
+    POPOUT_VISIBLE = true;
+}
+
+function close_popout() {
+    $popout.fadeOut(animation_duration, () => {
+        $settings_element.appendTo($original_settings_parent);
+        $popout.remove();
+    });
+    POPOUT_VISIBLE = false;
 }
 
 // Entry Point
