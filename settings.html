@@ -193,14 +193,14 @@
                     <span>Summary Separator</span>
                 </label>
 
-                <label title="Threshold determining how many recent messages remain in raw chat before summaries take over." class="checkbox_label">
-                    <input id="summary_injection_threshold" class="text_pole inline_setting" type="number" min="0" max="999" />
-                    <select id="summary_injection_threshold_type" class="text_pole inline_setting">
-                        <option value="messages" title="Threshold is placed after this many messages">msg</option>
-                        <option value="tokens" title="Threshold is placed after this many tokens">tk</option>
-                        <option value="context" title="Threshold is placed after this percent of max context">%</option>
-                    </select>
-                    <span>Raw Chat Reserve</span>
+                <label title="Minimum number of recent messages to always keep in raw chat, regardless of context size (unless they exceed the threshold below)." class="checkbox_label">
+                    <input id="messages_to_keep" class="text_pole inline_setting" type="number" min="0" max="999" />
+                    <span>Messages to Keep</span>
+                </label>
+
+                <label title="Ignore 'Messages to Keep' if they fill up this percentage of the Chat Context (CC)." class="checkbox_label">
+                    <input id="kept_messages_context_threshold" class="text_pole inline_setting" type="number" min="0" max="100" />
+                    <span>Ignore Kept Messages if % of CC filled</span>
                 </label>
 
                 <label title="All messages beyond the raw chat threshold will be hidden from the active chat prompt (replaced by summary injections)." class="checkbox_label">
