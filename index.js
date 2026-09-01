@@ -2872,7 +2872,7 @@ class SummaryPromptEditInterface {
 
 // STUBS for macro engine
 function get_summary_connection_profile() {
-    return get_active_connection_profile();
+    return get_active_connection_profile()?.id;
 }
 async function get_connection_profile_api() {
     return "default";
