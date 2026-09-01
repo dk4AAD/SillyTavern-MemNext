@@ -474,6 +474,212 @@ function get_character_key(message) {
 }
 
 // Connection Profile & Generation
+// --- Main Profile Functions ---
+
+function update_profile_section() {
+    let current_profile = get_settings('profile');
+    let current_character_profile = get_character_profile();
+    let current_chat_profile = get_chat_profile();
+    let profile_options = Object.keys(get_settings('profiles'));
+
+    let content_class = `.${settings_content_class}`;
+    let $choose_profile_dropdown = $(`${content_class} #profile`).empty();
+    let $character = $(`${content_class} button#character_profile`);
+    let $chat = $(`${content_class} button#chat_profile`);
+    let $character_icon = $character.find('i');
+    let $chat_icon = $chat.find('i');
+
+    for (let profile of profile_options) {
+        let text = profile;
+        let html_safe_name = profile.replace(/"/g, '&quot;');
+        if (profile === current_character_profile) text = `${profile} (Character)`;
+        else if (profile === current_chat_profile) text = `${profile} (Chat)`;
+        $choose_profile_dropdown.append(`<option value="${html_safe_name}">${text}</option>`);
+    }
+    $choose_profile_dropdown.val(current_profile);
+
+    let lock_class = 'fa-lock';
+    let unlock_class = 'fa-unlock';
+    let highlight_class = 'button_highlight';
+
+    if (current_character_profile === current_profile) {
+        $character.addClass(highlight_class);
+        $character_icon.removeClass(unlock_class).addClass(lock_class);
+    } else {
+        $character.removeClass(highlight_class);
+        $character_icon.removeClass(lock_class).addClass(unlock_class);
+    }
+
+    if (current_chat_profile === current_profile) {
+        $chat.addClass(highlight_class);
+        $chat_icon.removeClass(unlock_class).addClass(lock_class);
+    } else {
+        $chat.removeClass(highlight_class);
+        $chat_icon.removeClass(lock_class).addClass(unlock_class);
+    }
+}
+
+function load_profile(profile=null) {
+    if (!profile) profile = get_settings('profile');
+    const ext = extension_settings[MODULE_NAME];
+    if (!ext.profiles[profile]) {
+        error("Profile not found: " + profile);
+        return;
+    }
+
+    let current_profile = ext.profile;
+    ext.profile = profile;
+    saveSettingsDebounced();
+
+    if (get_settings("notify_on_profile_switch") && current_profile !== profile) {
+        toastr.info(`Switched to profile "${profile}"`);
+    }
+
+    refresh_settings();
+    refresh_memory();
+    update_profile_section();
+}
+
+function export_profile(profile=null) {
+    if (!profile) profile = get_settings('profile');
+    let profiles = get_settings('profiles');
+    let settings = profiles[profile];
+    if (!settings) {
+        error("Profile not found: " + profile);
+        return;
+    }
+    log("Exporting Configuration Profile: " + profile);
+    const data = JSON.stringify(settings, null, 4);
+    download(data, `${profile}.json`, 'application/json');
+}
+
+async function import_profile(e) {
+    let file = e.target.files[0];
+    if (!file) return;
+
+    const name = file.name.replace('.json', '');
+    const data = await parseJsonFile(file);
+
+    let profiles = get_settings('profiles');
+    profiles[name] = data;
+    set_settings('profiles', profiles);
+    load_profile(name);
+
+    toastr.success(`Profile "${name}" imported`);
+    e.target.value = null;
+    refresh_settings();
+}
+
+async function rename_profile() {
+    let ctx = getContext();
+    let old_name = get_settings('profile');
+    let new_name = await ctx.Popup.show.input("Rename Configuration Profile", `Enter a new name:`, old_name);
+
+    if (!new_name || old_name === new_name) return;
+    let profiles = get_settings('profiles');
+    if (profiles[new_name]) {
+        toastr.error(`Profile [${new_name}] already exists`);
+        return;
+    }
+
+    profiles[new_name] = profiles[old_name];
+    delete profiles[old_name];
+    set_settings('profiles', profiles);
+    set_settings('profile', new_name);
+
+    let character_profiles = get_settings('character_profiles');
+    for (let [character_key, character_profile] of Object.entries(character_profiles)) {
+        if (character_profile === old_name) character_profiles[character_key] = new_name;
+    }
+    set_settings('character_profiles', character_profiles);
+
+    log(`Renamed profile [${old_name}] to [${new_name}]`);
+    update_profile_section();
+}
+
+function new_profile() {
+    let profiles = get_settings('profiles');
+    let profile = 'New Profile';
+    let i = 1;
+    while (profiles[profile]) {
+        profile = `New Profile ${i}`;
+        i++;
+    }
+    profiles[profile] = structuredClone(default_settings);
+    set_settings('profiles', profiles);
+    load_profile(profile);
+}
+
+async function delete_profile() {
+    if (Object.keys(get_settings('profiles')).length === 1) {
+        toastr.error("Cannot delete your last profile");
+        return;
+    }
+    let profile = get_settings('profile');
+    let profiles = get_settings('profiles');
+
+    let result = await getContext().Popup.show.confirm("Confirm Deletion", `Permanently delete profile: "${profile}"?`);
+    if (!result) return;
+
+    delete profiles[profile];
+    set_settings('profiles', profiles);
+    toastr.success(`Deleted Configuration Profile: "${profile}"`);
+
+    let character_profiles = get_settings('character_profiles') ?? {};
+    for (let [id, name] of Object.entries(character_profiles)) {
+        if (name === profile) delete character_profiles[id];
+    }
+    set_settings('character_profiles', character_profiles);
+    
+    // Switch to Default or first available
+    if (profiles['Default']) load_profile('Default');
+    else load_profile(Object.keys(profiles)[0]);
+}
+
+function toggle_character_profile() {
+    let key = get_current_character_identifier();
+    if (!key) return;
+    let profile = get_settings('profile');
+    set_character_profile(key, profile === get_character_profile() ? null : profile);
+}
+
+function toggle_chat_profile() {
+    let profile = get_settings('profile');
+    set_chat_profile(profile === get_chat_profile() ? null : profile);
+}
+
+function set_character_profile(key, profile=null) {
+    let character_profiles = get_settings('character_profiles');
+    if (profile) {
+        character_profiles[key] = profile;
+        log(`Set character [${key}] to use profile [${profile}]`);
+    } else {
+        delete character_profiles[key];
+        log(`Unset character [${key}] default profile`);
+    }
+    set_settings('character_profiles', character_profiles);
+    update_profile_section();
+}
+
+function set_chat_profile(profile=null) {
+    const meta = chat_metadata;
+    if (!meta[MODULE_NAME]) meta[MODULE_NAME] = {};
+    
+    if (profile) {
+        meta[MODULE_NAME].profile = profile;
+        log(`Set chat to use profile [${profile}]`);
+    } else {
+        meta[MODULE_NAME].profile = null;
+        log(`Unset chat default profile`);
+    }
+    saveMetadataDebounced();
+    update_profile_section();
+}
+
+function auto_load_profile() {
+    let profile = get_chat_profile() || get_character_profile();
+    load_profile(profile || 'Default');
+}
 function get_connection_profiles() {
     const context = getContext();
     return context?.extensionSettings?.connectionManager?.profiles || [];
@@ -1141,6 +1347,7 @@ async function on_chat_event(event, data = null) {
             refresh_memory();
             break;
         case 'chat_changed':
+            auto_load_profile();
             INJECTION_THRESHOLD_INDEX = null;
             if (chat_metadata.memnext) chat_metadata.memnext.iti = null;
             refresh_settings();
@@ -1411,6 +1618,27 @@ function initialize_settings_ui() {
             toast("Profile reverted to default.", "success");
         }
     });
+
+    // Profile Management Bindings
+    bind_input('profile', 'profile', 'text');
+    bind_input('notify_on_profile_switch', 'notify_on_profile_switch', 'boolean');
+    $(`.${settings_content_class} #profile`).off('change').on('change', function() {
+        load_profile($(this).val());
+    });
+
+    $(`.${settings_content_class} #save_profile`).on('click', () => save_profile());
+    $(`.${settings_content_class} #restore_profile`).on('click', () => load_profile());
+    $(`.${settings_content_class} #rename_profile`).on('click', () => rename_profile());
+    $(`.${settings_content_class} #new_profile`).on('click', () => new_profile());
+    $(`.${settings_content_class} #delete_profile`).on('click', () => delete_profile());
+    
+    $(`.${settings_content_class} #export_profile`).on('click', () => export_profile());
+    $(`.${settings_content_class} #import_profile`).on('click', (e) => { $(e.target).parent().find("#import_file").click() });
+    $(`.${settings_content_class} #import_file`).on('change', async (e) => await import_profile(e));
+    
+    $(`.${settings_content_class} #character_profile`).on('click', () => toggle_character_profile());
+    $(`.${settings_content_class} #chat_profile`).on('click', () => toggle_chat_profile());
+
 
     update_connection_profile_dropdown();
     refresh_settings();
