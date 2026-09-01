@@ -2436,7 +2436,7 @@ class SummaryPromptEditInterface {
             text = this.ctx.formatInstructModePrompt(this.ctx.chat[index].name, text, role === "user")
             payload.push({role: role, content: text})
         } else {
-            payload.push({role: this.get_prompt_role(true), content: text})
+            payload.push({content: text})
         }
         return payload
     }
