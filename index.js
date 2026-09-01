@@ -1735,6 +1735,9 @@ function initialize_slash_commands() {
     const ctx = getContext();
     const SlashCommandParser = ctx?.SlashCommandParser;
     const SlashCommand = ctx?.SlashCommand;
+    const SlashCommandArgument = ctx?.SlashCommandArgument;
+    const SlashCommandNamedArgument = ctx?.SlashCommandNamedArgument;
+    const ARGUMENT_TYPE = ctx?.ARGUMENT_TYPE;
     if (!SlashCommandParser || !SlashCommand) return;
 
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
