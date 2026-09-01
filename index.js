@@ -1,4 +1,5 @@
 /* eslint-disable */
+import { getRegexScripts, runRegexScript } from '../../../../scripts/extensions/regex/engine.js';
 import {
     getStringHash,
     debounce,
@@ -2814,4 +2815,31 @@ class SummaryPromptEditInterface {
 
         return messages
     }
+}
+
+// STUBS for macro engine
+function get_summary_connection_profile() {
+    return get_active_connection_profile();
+}
+async function get_connection_profile_api() {
+    return "default";
+}
+function add_i18n($element=null) {
+    if ($element === null) {
+        $element = $(`.${settings_content_class}`)
+    }
+    $element.each(function () {
+        let $this = $(this);
+        $this.find('*').each(function () {
+            let $el = $(this);
+            if ($el.attr('title')) $el.attr('title', translate($el.attr('title')));
+            if ($el.attr('placeholder')) $el.attr('placeholder', translate($el.attr('placeholder')));
+            if (!this.childNodes) return
+            for (let child of this.childNodes) {
+                let text = child.nodeValue
+                if (!text?.trim()) continue
+                child.nodeValue = text?.replace(text?.trim(), translate(text?.trim()))
+            }
+        });
+    })
 }
