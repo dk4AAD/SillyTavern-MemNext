@@ -476,7 +476,7 @@ function get_character_key(message) {
 // Connection Profile & Generation
 function get_connection_profiles() {
     const context = getContext();
-    return context?.chatCompletionSettings?.connection_profiles || [];
+    return context?.extensionSettings?.connectionManager?.profiles || [];
 }
 
 function get_connection_profile(id) {
@@ -490,7 +490,7 @@ function get_active_connection_profile() {
         if (found) return found;
     }
     const context = getContext();
-    const active_id = context?.chatCompletionSettings?.active_profile;
+    const active_id = context?.extensionSettings?.connectionManager?.selectedProfile;
     return get_connection_profile(active_id);
 }
 
@@ -1510,21 +1510,16 @@ function initialize_message_buttons() {
         });
     });
 
-    // Observe and inject buttons into message hover panels
-    const observer = new MutationObserver(mutations => {
-        for (const mutation of mutations) {
-            for (const node of mutation.addedNodes) {
-                if (node.nodeType === 1 && node.classList.contains('extraMesButtons')) {
-                    const $buttons = $(node);
-                    if ($buttons.find(`.${summarize_button_class}`).length === 0) {
-                        $buttons.append(message_buttons_template);
-                    }
-                }
-            }
+    // Inject buttons into the message template
+    $('#message_template .mes_buttons .extraMesButtons').prepend(message_buttons_template);
+
+    // Also inject into any already rendered messages
+    $('#chat .mes').each(function () {
+        const $buttons = $(this).find('.extraMesButtons');
+        if ($buttons.length > 0 && $buttons.find(`.${summarize_button_class}`).length === 0) {
+            $buttons.prepend(message_buttons_template);
         }
     });
-
-    observer.observe(document.body, { childList: true, subtree: true });
 }
 
 // Slash commands
