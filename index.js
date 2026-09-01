@@ -341,7 +341,15 @@ function get_current_character_identifier() {
 }
 
 function clean_string_for_html(text) {
-    return String(text ?? '').replace(/["&'<>]/g, '');
+    return String(text ?? "").replace(/["&'<>]/g, function(match) {
+        switch (match) {
+            case "\"": return "&quot;";
+            case "&": return "&amp;";
+            case "'": return "&#39;";
+            case "<": return "&lt;";
+            case ">": return "&gt;";
+        }
+    });
 }
 
 function escape_string(text) {
