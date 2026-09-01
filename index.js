@@ -1,5 +1,6 @@
 /* eslint-disable */
 import { getRegexScripts, runRegexScript } from '../../../../scripts/extensions/regex/engine.js';
+import { itemizedPrompts } from '../../../../scripts/itemized-prompts.js';
 import {
     getStringHash,
     debounce,
@@ -1803,6 +1804,33 @@ function initialize_slash_commands() {
         },
         helpString: 'Trigger manual batch compaction of memory blocks.'
     }));
+
+    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+        name: 'memnext-get-message-world-info',
+        callback: async (args, index) => {
+            let chat = getContext().chat
+            if (index === "") index = chat.length-1
+            index = Number(index)
+            let prompts = get_message_prompts(index)
+            return prompts?.worldInfoString ?? ""
+        },
+        helpString: 'Return the world info used when generating a given message.',
+        unnamedArgumentList: [
+            SlashCommandArgument.fromProps({
+                description: 'Index of the message',
+                isRequired: false,
+                typeList: [ARGUMENT_TYPE.NUMBER]
+            }),
+        ],
+    }));
+
+    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+        name: 'memnext-max-summary-tokens',
+        callback: async (args) => {
+            return String(get_summary_max_tokens());
+        },
+        helpString: 'Return the max tokens allowed for summarization.'
+    }));
 }
 
 // Popout logic
@@ -2132,7 +2160,7 @@ class SummaryPromptEditInterface {
 
 
         // manually set a larger width
-        this.$content.closest('dialog').css('min-width', '80%')
+        this.$content.closest('dialog').css({'min-width': '80%', 'height': '70vh'})
 
         // buttons
         this.$preview.on('click', () => this.preview_prompt())
@@ -2880,4 +2908,22 @@ function refresh_select2_element(element, selected, options, placeholder="", cal
     }
     $select.val(selected)
     $select.trigger('change.select2')
+}
+function get_message_prompts(index) {
+    for (let i = 0; i < itemizedPrompts.length; i++) {
+        let itemized_prompt = itemizedPrompts[i]
+        if (itemized_prompt.mesId === index) {
+            return itemized_prompt
+        }
+    }
+}
+async function display_text_modal(title, text="") {
+    let ctx = getContext();
+    text = String(text).replace(/\n/g, '<br>');
+    let html = `<h3>${title}</h3><div style="text-align: left; overflow: auto;">${text}</div>`
+    let popup = new ctx.Popup(html, ctx.POPUP_TYPE.TEXT, '', {okButton: 'Close', allowVerticalScrolling: true, wider: true});
+    await popup.show()
+}
+function get_summary_max_tokens() {
+    return amount_gen || 50;
 }
