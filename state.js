@@ -93,6 +93,24 @@ export function notify_ui_refresh() {
   }
 }
 
+export function migrate_templates(obj) {
+  if (!obj || typeof obj !== 'object') return false;
+  let changed = false;
+  if (typeof obj.long_template === 'string' && (obj.long_template.includes('{{memnext-memories}}') || obj.long_template.includes('{{memories}}'))) {
+    obj.long_template = obj.long_template
+      .replace(/\{\{\s*memnext-memories\s*\}\}/g, '{{memnext_long}}')
+      .replace(/\{\{\s*memories\s*\}\}/g, '{{memnext_long}}');
+    changed = true;
+  }
+  if (typeof obj.short_template === 'string' && (obj.short_template.includes('{{memnext-memories}}') || obj.short_template.includes('{{memories}}'))) {
+    obj.short_template = obj.short_template
+      .replace(/\{\{\s*memnext-memories\s*\}\}/g, '{{memnext_short}}')
+      .replace(/\{\{\s*memories\s*\}\}/g, '{{memnext_short}}');
+    changed = true;
+  }
+  return changed;
+}
+
 export function initialize_settings() {
   if (extension_settings[MODULE_NAME]) {
     log("Settings already initialized.");
@@ -102,6 +120,24 @@ export function initialize_settings() {
     extension_settings[MODULE_NAME].profiles = {
       'Default': structuredClone(default_settings)
     };
+  }
+  let changed = migrate_templates(extension_settings[MODULE_NAME]);
+  if (extension_settings[MODULE_NAME]?.profiles) {
+    for (let p of Object.keys(extension_settings[MODULE_NAME].profiles)) {
+      if (migrate_templates(extension_settings[MODULE_NAME].profiles[p])) {
+        changed = true;
+      }
+    }
+  }
+  if (changed) {
+    if (typeof saveSettingsDebounced === 'function') {
+      saveSettingsDebounced();
+    } else {
+      const ctx = getContext();
+      if (typeof ctx?.saveSettingsDebounced === 'function') {
+        ctx.saveSettingsDebounced();
+      }
+    }
   }
   load_profile(get_settings('profile'));
 }
@@ -295,6 +331,7 @@ export function load_profile(profile = null) {
       return;
     }
   }
+  migrate_templates(settings);
   log("Loading Configuration Profile: " + profile);
   Object.assign(extension_settings[MODULE_NAME], settings);
   set_settings('profile', profile);
