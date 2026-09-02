@@ -1,6 +1,6 @@
 /* eslint-disable */
-import { extension_prompt_roles, extension_prompt_types, chat_metadata } from '../../../../script.js';
-import { extension_settings, getContext, saveSettingsDebounced, saveMetadataDebounced } from '../../../extensions.js';
+import { extension_prompt_roles, extension_prompt_types, chat_metadata, saveSettingsDebounced } from '../../../../script.js';
+import { extension_settings, getContext, saveMetadataDebounced } from '../../../extensions.js';
 import {
   MODULE_NAME,
   settings_content_class,
@@ -134,6 +134,11 @@ export function set_settings(name, val) {
   extension_settings[MODULE_NAME][name] = val;
   if (typeof saveSettingsDebounced === 'function') {
     saveSettingsDebounced();
+  } else {
+    const ctx = getContext();
+    if (typeof ctx?.saveSettingsDebounced === 'function') {
+      ctx.saveSettingsDebounced();
+    }
   }
 }
 
@@ -298,6 +303,11 @@ export function load_profile(profile = null) {
   set_settings('profile', profile);
   if (typeof saveSettingsDebounced === 'function') {
     saveSettingsDebounced();
+  } else {
+    const ctx = getContext();
+    if (typeof ctx?.saveSettingsDebounced === 'function') {
+      ctx.saveSettingsDebounced();
+    }
   }
   if (get_settings("notify_on_profile_switch") && current_profile !== profile && typeof toastr !== 'undefined') {
     toastr.info(`Switched to profile "${profile}"`);
