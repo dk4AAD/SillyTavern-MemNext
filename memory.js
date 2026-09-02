@@ -140,12 +140,15 @@ export async function fillup() {
   if (CC < 100) CC = 100;
 
   let meta = chat_metadata?.memnext || {};
-  if (meta.iti !== undefined && meta.iti !== null) {
-    let raw_sum = 0;
-    for (let i = chat.length - 1; i > meta.iti; i--) {
-      if (chat[i]) raw_sum += count_tokens(chat[i].mes || '');
-    }
-    if (raw_sum <= CC) {
+  let raw_start = (meta.iti !== undefined && meta.iti !== null && meta.iti >= 0) ? meta.iti : -1;
+  let raw_sum = 0;
+  for (let i = chat.length - 1; i > raw_start; i--) {
+    if (chat[i]) raw_sum += count_tokens(chat[i].mes || '');
+  }
+
+  // Check if uncompacted messages fit within available context capacity CC
+  if (raw_sum <= CC) {
+    if (meta.iti !== undefined && meta.iti !== null && meta.iti >= 0) {
       let messages_to_keep = Number(get_settings('messages_to_keep')) || 5;
       let kept_sum = 0;
       let start_kept = Math.max(0, chat.length - messages_to_keep);
@@ -153,7 +156,7 @@ export async function fillup() {
         if (chat[i]) kept_sum += count_tokens(chat[i].mes || '');
       }
       let threshold_pct = Number(get_settings('kept_messages_context_threshold')) || 30;
-      if (kept_sum <= threshold_pct / 100 * CC) {
+      if (kept_sum <= (threshold_pct / 100) * CC) {
         INJECTION_THRESHOLD_INDEX = meta.iti;
         const position = Number(get_settings('injection_position')) || extension_prompt_types?.IN_PROMPT || 0;
         const role = Number(get_settings('injection_role')) || extension_prompt_roles?.SYSTEM || 0;
@@ -164,15 +167,28 @@ export async function fillup() {
         notify_budget_refresh();
         return; // KV CACHE FROZEN!
       }
+    } else {
+      // Entire dialogue is under context capacity! No messages need compaction or exclusion.
+      INJECTION_THRESHOLD_INDEX = null;
+      if (chat_metadata?.memnext) {
+        chat_metadata.memnext.iti = null;
+      }
+      if (typeof ctx.setExtensionPrompt === 'function') {
+        ctx.setExtensionPrompt(`${MODULE_NAME}_long`, "");
+        ctx.setExtensionPrompt(`${MODULE_NAME}_short`, "");
+      }
+      notify_budget_refresh();
+      return;
     }
   }
 
+  // Raw chat has exceeded capacity CC; calculate new compaction and threshold
   let result = await try_first_to_keep(CC);
   if (!result) {
     result = await try_for_cc(CC);
   }
 
-  if (result) {
+  if (result && (result[0] !== null || result[1] !== null || result[2] !== null)) {
     let [long_summary, short_indexes, iti] = result;
     INJECTION_THRESHOLD_INDEX = iti;
     let long_injection = "";
@@ -203,6 +219,11 @@ export async function fillup() {
       chat_metadata.memnext.short_injection = short_injection;
     }
     saveChatDebounced();
+  } else {
+    INJECTION_THRESHOLD_INDEX = null;
+    if (chat_metadata?.memnext) {
+      chat_metadata.memnext.iti = null;
+    }
   }
   notify_budget_refresh();
 }
@@ -210,21 +231,27 @@ export async function fillup() {
 export async function try_first_to_keep(CC) {
   const ctx = getContext();
   const chat = ctx?.chat;
-  if (!Array.isArray(chat)) return null;
+  if (!Array.isArray(chat) || chat.length === 0) return null;
 
   let messages_to_keep = Number(get_settings('messages_to_keep')) || 5;
   let threshold_pct = Number(get_settings('kept_messages_context_threshold')) || 30;
   let sum = 0;
   let start_idx = Math.max(0, chat.length - messages_to_keep);
+  let longest_idx = -1;
+  let max_len = -1;
 
   for (let i = chat.length - 1; i >= start_idx; i--) {
     if (!chat[i]) continue;
-    sum += count_tokens(chat[i].mes || '');
+    const len = count_tokens(chat[i].mes || '');
+    sum += len;
+    if (len > max_len) {
+      max_len = len;
+      longest_idx = i;
+    }
   }
 
-  if (sum > threshold_pct / 100 * CC) {
-    let history_calc_message = Math.max(0, start_idx - 1);
-    return await calculate_memo(history_calc_message);
+  if (sum > (threshold_pct / 100) * CC && longest_idx !== -1) {
+    return await calculate_memo(longest_idx);
   }
   return null;
 }

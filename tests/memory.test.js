@@ -8,9 +8,11 @@ import {
   set_chat_long_term_memory,
   check_message_exclusion,
   fillup,
-  refresh_memory
+  refresh_memory,
+  get_injection_threshold_index,
+  set_injection_threshold_index
 } from '../memory.js';
-import { chat_metadata } from './mocks/sillytavern.js';
+import { chat_metadata, mockChat } from './mocks/sillytavern.js';
 
 test('memory.js: get_data and set_data manage message extra properties', () => {
   const msg = {};
@@ -43,4 +45,24 @@ test('memory.js: check_message_exclusion filters messages based on configuration
 test('memory.js: fillup and refresh_memory execute without error', async () => {
   await refresh_memory();
   assert.ok(true);
+});
+
+test('memory.js: ITI remains null when chat is within context limits and not regenerated', async () => {
+  set_injection_threshold_index(null);
+  if (chat_metadata.memnext) {
+    chat_metadata.memnext.iti = null;
+  }
+  // Setup mockChat with moderate size well within default CC
+  mockChat.length = 0;
+  for (let i = 0; i < 8; i++) {
+    mockChat.push({
+      mes: `Message number ${i} in dialogue.`,
+      is_user: i % 2 === 0,
+      extra: { memnext: { memory: `Summary of message ${i}` } }
+    });
+  }
+
+  await refresh_memory();
+  assert.equal(get_injection_threshold_index(), null);
+  assert.equal(chat_metadata.memnext?.iti ?? null, null);
 });
