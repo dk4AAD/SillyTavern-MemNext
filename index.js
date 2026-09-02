@@ -2,7 +2,7 @@
 import { getContext } from '../../../extensions.js';
 import { MacrosParser } from '../../../macros.js';
 import { MODULE_NAME, MODULE_NAME_FANCY, long_memory_macro, short_memory_macro } from './constants.js';
-import { log, error } from './utils.js';
+import { log, error, guard_get_element_by_id } from './utils.js';
 import { initialize_settings, chat_enabled, toggle_chat_enabled } from './state.js';
 import {
   init_interfaces,
@@ -25,6 +25,9 @@ import {
 } from './summarization.js';
 
 export { MODULE_NAME } from './constants.js';
+
+// Install DOM guard immediately on module load to prevent empty-string getElementById warnings
+guard_get_element_by_id();
 
 // Register SillyTavern slash commands
 export function initialize_slash_commands() {
@@ -103,6 +106,7 @@ export function initialize_slash_commands() {
 // Extension Bootstrap
 if (typeof jQuery !== 'undefined') {
   jQuery(async function () {
+    guard_get_element_by_id();
     log(`Loading ${MODULE_NAME_FANCY} extension...`);
     initialize_settings();
     init_interfaces();

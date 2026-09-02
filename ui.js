@@ -971,6 +971,10 @@ export class SummaryPromptEditInterface {
       macro.instruct_template = $macro_instruct.is(':checked');
     });
 
+    // Ensure regex select has an explicit unique ID before Select2 attachment
+    let regex_id = `${id}_regex_select`;
+    $regex_select.attr('id', regex_id);
+
     let options = [];
     let selected = [];
     let regex_scripts = typeof getRegexScripts === 'function' ? getRegexScripts() : [];
@@ -1089,7 +1093,7 @@ export class SummaryPromptEditInterface {
   }
 
   get_id(name) {
-    return `summary_macro_definition_${name}`;
+    return `summary_macro_definition_${name || 'unnamed'}`;
   }
 
   list_macros() {

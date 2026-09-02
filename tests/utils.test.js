@@ -12,7 +12,9 @@ import {
   get_free_context_percent,
   assign_and_prune,
   assign_defaults,
-  regex
+  regex,
+  guard_get_element_by_id,
+  refresh_select2_element
 } from '../utils.js';
 
 test('utils.js: clean_string_for_html escapes HTML chars properly', () => {
@@ -61,4 +63,55 @@ test('utils.js: regex helper matches capture groups', () => {
   const str = "hello {{macro1}} world {{macro2}}";
   const matches = regex(str, /\{\{(.*?)\}\}/g);
   assert.deepEqual(matches, ['macro1', 'macro2']);
+});
+
+test('utils.js: guard_get_element_by_id intercepts empty string safely', () => {
+  let nativeCalled = 0;
+  global.document = {
+    getElementById: function (id) {
+      nativeCalled++;
+      return { id };
+    }
+  };
+
+  guard_get_element_by_id();
+
+  // Passing empty string or null/undefined must return null directly without calling native
+  assert.equal(document.getElementById(''), null);
+  assert.equal(document.getElementById(null), null);
+  assert.equal(document.getElementById(undefined), null);
+  assert.equal(nativeCalled, 0);
+
+  // Passing valid non-empty string must delegate to native getElementById
+  const el = document.getElementById('valid_id');
+  assert.deepEqual(el, { id: 'valid_id' });
+  assert.equal(nativeCalled, 1);
+});
+
+test('utils.js: refresh_select2_element handles elements without id gracefully', () => {
+  const mockElement = {
+    attr: (attrName, val) => {
+      if (val !== undefined) mockElement[attrName] = val;
+      return mockElement[attrName];
+    },
+    empty: () => mockElement,
+    append: () => mockElement,
+    val: () => mockElement,
+    parent: () => mockElement
+  };
+
+  const orig$ = global.$;
+  global.$ = () => ({
+    length: 0,
+    find: () => mockElement
+  });
+
+  try {
+    assert.doesNotThrow(() => {
+      refresh_select2_element(mockElement, [], [{ id: 1, name: 'Script1' }], 'Select script', () => {});
+    });
+    assert.ok(mockElement['id'], 'An auto-generated ID should be assigned to the element');
+  } finally {
+    global.$ = orig$;
+  }
 });

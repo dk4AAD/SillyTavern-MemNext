@@ -185,14 +185,23 @@ export function add_i18n($element = null) {
 }
 
 export function refresh_select2_element(element, selected, options, placeholder = "", callback) {
-  if (typeof $ === 'undefined') return;
+  if (typeof $ === 'undefined' || !element) return;
   let $select = element;
   let id;
   if (typeof element === "string") {
+    if (!element) return;
     $select = $(`#${element}`);
     id = element;
   } else {
-    id = element.attr('id');
+    id = element.attr ? element.attr('id') : element.id;
+    if (!id) {
+      id = `memnext_select2_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      if (typeof element.attr === 'function') {
+        element.attr('id', id);
+      } else {
+        element.id = id;
+      }
+    }
   }
   let $dropdown = $(`#select2-${id}-results`);
   if ($dropdown.length > 0) return;
@@ -248,5 +257,30 @@ export function assign_and_prune(target, source) {
 export function assign_defaults(target, defaults) {
   for (let key in defaults) {
     if (target[key] === undefined) target[key] = defaults[key];
+  }
+}
+
+/**
+ * Intercepts empty string queries to document.getElementById to silence
+ * harmless browser console warnings (e.g. Firefox "Empty string passed to getElementById().")
+ * and strictly conform to WHATWG DOM specs by returning null.
+ */
+export function guard_get_element_by_id() {
+  if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
+  try {
+    const raw = document.getElementById;
+    if (!raw.__memnext_guarded__) {
+      const bound = raw.bind(document);
+      const guarded = function (elementId) {
+        if (!elementId || elementId === '') {
+          return null;
+        }
+        return bound(elementId);
+      };
+      guarded.__memnext_guarded__ = true;
+      document.getElementById = guarded;
+    }
+  } catch (e) {
+    console.debug('[MemNext] Could not install getElementById guard:', e);
   }
 }
