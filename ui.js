@@ -371,8 +371,15 @@ export function initialize_settings_ui() {
         summaryQueue.add(i);
       }
     }
-    toast(`Queued ${summaryQueue.tasks.length} messages for summarization.`, "info");
-    await summaryQueue.run();
+    if (summaryQueue.tasks.length > 0) {
+      toast(`Queued ${summaryQueue.tasks.length} messages for summarization.`, "info");
+      await summaryQueue.run();
+    } else {
+      toast("All eligible messages already have summaries. Running memory compaction...", "info");
+      await refresh_memory();
+    }
+    update_all_message_visuals();
+    toast("Full chat summarization and memory update complete.", "success");
   });
   $(`.${settings_content_class} #clear_long_term_memory`).on('click', () => {
     set_chat_long_term_memory("");
@@ -699,7 +706,12 @@ export class MemoryEditInterface {
           summaryQueue.add(i);
         }
       }
-      await summaryQueue.run();
+      if (summaryQueue.tasks.length > 0) {
+        await summaryQueue.run();
+      } else {
+        await refresh_memory();
+      }
+      update_all_message_visuals();
       populate();
     });
 

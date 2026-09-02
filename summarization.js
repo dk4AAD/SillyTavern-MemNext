@@ -32,25 +32,65 @@ export function update_all_message_visuals() {
   }
 }
 
+// Progress Bar Display matching SillyTavern-MessageSummarize
+export function show_progress_bar(id, progress, total, title) {
+  if (typeof $ === 'undefined') return;
+  const full_id = `${PROGRESS_BAR_ID}_${id}`;
+  const $existing = $(`.${full_id}`);
+  if ($existing.length > 0) {
+    if (title) $existing.find('div.title').text(title);
+    if (progress !== null && progress !== undefined) {
+      $existing.find('span.progress').text(progress);
+      $existing.find('progress').val(progress);
+    }
+    if (total !== null && total !== undefined) {
+      $existing.find('span.total').text(total);
+      $existing.find('progress').attr('max', total);
+    }
+    return;
+  }
+
+  const cancelTitle = typeof t === 'function' ? t`Abort summarization` : 'Abort summarization';
+  const bar = $(`
+<div class="${full_id} memnext_progress_bar flex-container justifyspacebetween alignitemscenter">
+    <div class="title">${title || 'Summarizing...'}</div>
+    <div>(<span class="progress">${progress || 0}</span> / <span class="total">${total || 0}</span>)</div>
+    <progress value="${progress || 0}" max="${total || 0}" class="flex1"></progress>
+    <button class="menu_button fa-solid fa-stop" title="${cancelTitle}"></button>
+</div>`);
+
+  bar.find('button').on('click', function () {
+    summaryQueue.stop();
+  });
+
+  $('#sheld').append(bar);
+  if ($('#memnext_memory_state_interface #progress_bar').length > 0) {
+    $('#memnext_memory_state_interface #progress_bar').append(bar.clone(true));
+  }
+}
+
+export function hide_progress_bar(id) {
+  if (typeof $ === 'undefined') return;
+  const full_id = `${PROGRESS_BAR_ID}_${id}`;
+  const $existing = $(`.${full_id}`);
+  if ($existing.length > 0) {
+    debug("Removing progress bar");
+    $existing.remove();
+  }
+}
+
 // SummaryQueue & Concurrency Management
 export class SummaryQueue {
   tasks = [];
   active_workers = 0;
   aborted = false;
+  total_tasks = 0;
+  completed_tasks = 0;
+  queue_running = false;
 
-  constructor() {
-    if (typeof $ !== 'undefined') {
-      this.progress_bar = $(`<div id="${PROGRESS_BAR_ID}" class="memnext_progress_bar" style="display:none;"><div class="progress_bar_fill"></div></div>`);
-    } else {
-      this.progress_bar = null;
-    }
-  }
+  constructor() {}
 
-  init_ui() {
-    if (this.progress_bar && typeof $ !== 'undefined') {
-      $('#sheld').append(this.progress_bar);
-    }
-  }
+  init_ui() {}
 
   add(index) {
     if (!this.tasks.includes(index)) {
@@ -58,56 +98,109 @@ export class SummaryQueue {
     }
   }
 
-  clear() {
-    this.tasks = [];
+  stop() {
     this.aborted = true;
+    this.tasks = [];
+    const ctx = getContext();
+    if (ctx && typeof ctx.stopGeneration === 'function') {
+      try {
+        ctx.stopGeneration();
+      } catch (e) {
+        debug(`stopGeneration error: ${e}`);
+      }
+    }
     this.hide_progress();
+    this.queue_running = false;
+    this.total_tasks = 0;
+    this.completed_tasks = 0;
+    if (get_settings('block_chat') && ctx && typeof ctx.activateSendButtons === 'function') {
+      ctx.activateSendButtons();
+    }
+    debug("SummaryQueue stopped.");
   }
 
-  show_progress(completed, total) {
+  clear() {
+    this.stop();
+  }
+
+  show_progress(completed, total, title = "Summarizing...") {
     if (!get_settings('auto_summarize_progress')) return;
-    if (!this.progress_bar || typeof $ === 'undefined') return;
-    this.progress_bar.show();
-    const percent = total > 0 ? (completed / total) * 100 : 0;
-    this.progress_bar.find('.progress_bar_fill').css('width', `${percent}%`);
+    show_progress_bar('summarize', completed, total, title);
   }
 
   hide_progress() {
-    if (this.progress_bar && typeof $ === 'undefined') return;
-    this.progress_bar?.hide();
+    hide_progress_bar('summarize');
+  }
+
+  add_extra_total(count, title = "Compacting memory...") {
+    this.total_tasks += count;
+    if (get_settings('auto_summarize_progress')) {
+      show_progress_bar('summarize', this.completed_tasks, this.total_tasks, title);
+    }
+  }
+
+  step_progress(title = null) {
+    this.completed_tasks++;
+    if (get_settings('auto_summarize_progress')) {
+      show_progress_bar('summarize', this.completed_tasks, this.total_tasks, title);
+    }
+  }
+
+  finish_compaction_progress() {
+    if (this.completed_tasks >= this.total_tasks && !this.queue_running) {
+      this.hide_progress();
+      this.total_tasks = 0;
+      this.completed_tasks = 0;
+    }
   }
 
   async run() {
+    if (this.queue_running || this.tasks.length === 0) return;
+    this.queue_running = true;
     this.aborted = false;
-    if (this.tasks.length === 0) return;
+    const ctx = getContext();
+
+    if (get_settings('block_chat') && ctx && typeof ctx.deactivateSendButtons === 'function') {
+      ctx.deactivateSendButtons();
+    }
+
     const concurrency = Number(get_settings('parallel_summaries_count')) || 1;
     const batch_size = Number(get_settings('auto_summarize_batch_size')) || 1;
-    let completed = 0;
-    const total = this.tasks.length;
-    this.show_progress(completed, total);
+    this.completed_tasks = 0;
+    this.total_tasks = this.tasks.length;
+    this.show_progress(this.completed_tasks, this.total_tasks, "Summarizing...");
 
     const workers = [];
     for (let i = 0; i < concurrency; i++) {
-      workers.push(this.worker(batch_size, () => {
-        completed++;
-        this.show_progress(completed, total);
-      }));
+      workers.push(this.worker(batch_size));
     }
     await Promise.all(workers);
+    this.queue_running = false;
+
+    // Run full fillup process using the newly generated summaries.
+    // If compaction triggers, compact_history extends the counter and continues showing progress.
+    await refresh_memory();
+
+    if (get_settings('block_chat') && ctx && typeof ctx.activateSendButtons === 'function') {
+      ctx.activateSendButtons();
+    }
+
     this.hide_progress();
-    refresh_memory();
+    this.total_tasks = 0;
+    this.completed_tasks = 0;
     saveChatDebounced();
   }
 
-  async worker(batch_size, on_step) {
+  async worker(batch_size) {
     while (this.tasks.length > 0 && !this.aborted) {
       const batch = this.tasks.splice(0, batch_size);
       for (const mes_id of batch) {
+        if (this.aborted) break;
         await summarize_message(mes_id);
-        if (on_step) on_step();
+        this.step_progress("Summarizing...");
       }
       const delay = Number(get_settings('summarization_delay')) || 0;
-      if (delay > 0) {
+      if (delay > 0 && !this.aborted) {
         await new Promise(r => setTimeout(r, delay));
       }
     }
@@ -294,7 +387,9 @@ export async function auto_summarize_chat() {
       summaryQueue.add(i);
     }
   }
-  await summaryQueue.run();
+  if (summaryQueue.tasks.length > 0) {
+    await summaryQueue.run();
+  }
 }
 
 export async function get_connection_profile_api() {
@@ -352,8 +447,8 @@ export async function on_chat_event(event, data = null) {
       if (data !== null && data !== undefined) {
         update_message_visuals(Number(data));
       }
-      refresh_memory();
       await auto_summarize_chat();
+      await refresh_memory();
       break;
     case 'char_message':
       if (data !== null && data !== undefined) {
@@ -402,6 +497,7 @@ export async function on_chat_event(event, data = null) {
     case 'before_message':
       if (get_settings('auto_summarize_on_send')) {
         await auto_summarize_chat();
+        await refresh_memory();
       }
       break;
   }

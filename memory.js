@@ -384,11 +384,13 @@ export async function compact_history(compact_start, history_calc_message, old_h
   }
   if (current_chunk.length > 0) chunks.push(current_chunk);
 
+  // Extend progress bar total counter by the number of short-to-long batches
+  if (chunks.length > 0 && summaryQueue && typeof summaryQueue.add_extra_total === 'function') {
+    summaryQueue.add_extra_total(chunks.length, "Compacting memory (short to long)...");
+  }
+
   let chunk_results = [];
   let prompt_template = get_settings('short_to_long_prompt') || default_short_to_long_prompt;
-  if (summaryQueue && typeof summaryQueue.show_progress === 'function') {
-    summaryQueue.show_progress(0, chunks.length);
-  }
   let old_size = old_history ? count_tokens(old_history) : 0;
 
   for (let i = 0; i < chunks.length; i++) {
@@ -403,12 +405,9 @@ export async function compact_history(compact_start, history_calc_message, old_h
     }];
     let res = await summarize_text(payload);
     chunk_results.push(res);
-    if (summaryQueue && typeof summaryQueue.show_progress === 'function') {
-      summaryQueue.show_progress(i + 1, chunks.length);
+    if (summaryQueue && typeof summaryQueue.step_progress === 'function') {
+      summaryQueue.step_progress("Compacting memory (short to long)...");
     }
-  }
-  if (summaryQueue && typeof summaryQueue.hide_progress === 'function') {
-    summaryQueue.hide_progress();
   }
 
   let combined_new = chunk_results.join('\n');
@@ -422,16 +421,15 @@ export async function compact_history(compact_start, history_calc_message, old_h
       let compiled = long_compaction_template
         .replace(/{{long_memory}}/g, combined_all)
         .replace(/{{long_term_memory_size}}/g, size);
-      if (summaryQueue && typeof summaryQueue.show_progress === 'function') {
-        summaryQueue.show_progress(0, 1);
+      if (summaryQueue && typeof summaryQueue.add_extra_total === 'function') {
+        summaryQueue.add_extra_total(1, "Compacting long-term memory...");
       }
       final_long = await summarize_text([{
         role: 'system',
         content: compiled
       }]);
-      if (summaryQueue && typeof summaryQueue.show_progress === 'function') {
-        summaryQueue.show_progress(1, 1);
-        summaryQueue.hide_progress();
+      if (summaryQueue && typeof summaryQueue.step_progress === 'function') {
+        summaryQueue.step_progress("Compacting long-term memory...");
       }
     } else {
       final_long = combined_all;
@@ -442,20 +440,23 @@ export async function compact_history(compact_start, history_calc_message, old_h
       let compiled = long_compaction_template
         .replace(/{{long_memory}}/g, combined_new)
         .replace(/{{long_term_memory_size}}/g, size);
-      if (summaryQueue && typeof summaryQueue.show_progress === 'function') {
-        summaryQueue.show_progress(0, 1);
+      if (summaryQueue && typeof summaryQueue.add_extra_total === 'function') {
+        summaryQueue.add_extra_total(1, "Compacting long-term memory...");
       }
       final_long = await summarize_text([{
         role: 'system',
         content: compiled
       }]);
-      if (summaryQueue && typeof summaryQueue.show_progress === 'function') {
-        summaryQueue.show_progress(1, 1);
-        summaryQueue.hide_progress();
+      if (summaryQueue && typeof summaryQueue.step_progress === 'function') {
+        summaryQueue.step_progress("Compacting long-term memory...");
       }
     } else {
       final_long = combined_new;
     }
+  }
+
+  if (summaryQueue && typeof summaryQueue.finish_compaction_progress === 'function') {
+    summaryQueue.finish_compaction_progress();
   }
 
   for (let i = compact_start; i <= history_calc_message; i++) {

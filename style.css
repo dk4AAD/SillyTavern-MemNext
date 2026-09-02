@@ -163,6 +163,10 @@ label.checkbox_label > span:first-child {
     backdrop-filter: blur(5px);
 }
 
+#sheld .memnext_progress_bar progress {
+    margin: 0 10px;
+}
+
 #memnext_memory_state_interface #progress_bar .memnext_progress_bar {
     width: 100%;
     position: absolute;

@@ -21,6 +21,26 @@ test('summarization.js: SummaryQueue class and singleton instance', () => {
   assert.equal(summaryQueue.aborted, true);
 });
 
+test('summarization.js: SummaryQueue progress counter extensions and tracking', () => {
+  const q = new SummaryQueue();
+  q.total_tasks = 10;
+  q.completed_tasks = 5;
+
+  // Simulate short-to-long compaction splitting into 3 batches
+  q.add_extra_total(3, "Compacting memory (short to long)...");
+  assert.equal(q.total_tasks, 13, "Total tasks counter must be increased by 3");
+
+  // Step progress
+  q.step_progress("Compacting memory...");
+  assert.equal(q.completed_tasks, 6, "Completed tasks counter must be incremented by 1");
+
+  // Stop / abort
+  q.stop();
+  assert.equal(q.aborted, true);
+  assert.equal(q.total_tasks, 0);
+  assert.equal(q.completed_tasks, 0);
+});
+
 test('summarization.js: clean_llm_reasoning_tags strips Gemma 4 channel thought tags', () => {
   // Empty thought channel
   const emptyTag = "<|channel>thought\n<channel|>Alice and Bob agreed to go to the park.";
