@@ -58,7 +58,8 @@ import {
   toggle_chat_profile,
   get_connection_profiles,
   get_summary_connection_profile,
-  set_ui_refresh_callback
+  set_ui_refresh_callback,
+  detect_settings_difference
 } from './state.js';
 import {
   get_data,
@@ -97,6 +98,58 @@ function get_message_div(index) {
   return div.length > 0 ? div : null;
 }
 
+export function open_edit_memory_input(index) {
+  const ctx = getContext();
+  const message = ctx?.chat?.[index];
+  if (!message) return;
+  const memory = (get_memory(message) || '').trim();
+
+  const $message_div = get_message_div(index);
+  if (!$message_div) return;
+  const $message_text_div = $message_div.find('.mes_text');
+  const $memory_div = $message_div.find(`div.${summary_div_class}`);
+
+  const $textarea = $(`<textarea class="${css_message_div} ${css_edit_textarea} text_pole" rows="1"></textarea>`);
+  $memory_div.hide();
+  if ($message_text_div.length > 0) {
+    $message_text_div.after($textarea);
+  } else {
+    $message_div.find('.mes_block').append($textarea);
+  }
+  $textarea.focus().val(memory);
+  try {
+    $textarea.height($textarea[0].scrollHeight - 6);
+  } catch {}
+
+  function confirm_edit() {
+    const new_memory = $textarea.val().trim();
+    $textarea.remove();
+    if (new_memory !== memory) {
+      set_data(message, 'memory', new_memory || null);
+      set_data(message, 'edited', true);
+      refresh_memory();
+      saveChatDebounced();
+    }
+    update_message_visuals(index);
+  }
+
+  function cancel_edit() {
+    $textarea.remove();
+    $memory_div.show();
+  }
+
+  $textarea.on('blur', confirm_edit);
+  $textarea.on('keydown', function (event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      confirm_edit();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      cancel_edit();
+    }
+  });
+}
+
 export function update_message_visuals(i, in_progress = false, custom_text = null) {
   const div = get_message_div(i);
   if (!div) return;
@@ -117,19 +170,30 @@ export function update_message_visuals(i, in_progress = false, custom_text = nul
   }
   if (!memory_text) return;
 
-  let style_class = css_message_div;
-  if (include === 'short') {
-    style_class += ` ${css_short_memory}`;
-  } else if (include === 'long') {
-    style_class += ` ${css_long_memory}`;
+  // Default to short memory (fancy green styling)
+  let style_class = css_short_memory;
+  if (include === 'long') {
+    style_class = css_long_memory;
   }
   if (lagging) {
     style_class += ` ${css_lagging_memory}`;
   }
 
-  const summary_element = $(`<div class="${summary_div_class} ${style_class}"><i class="fa-solid fa-quote-left" style="margin-right: 5px; opacity: 0.6;"></i><span></span></div>`);
-  summary_element.find('span').text(memory_text);
-  div.find('.mes_block').append(summary_element);
+  const summary_element = $(`<div class="${summary_div_class} ${css_message_div} ${style_class}" title="Click to edit summary"><i class="fa-solid fa-quote-left memnext_summary_icon"></i><span class="memnext_summary_text"></span></div>`);
+  summary_element.find('.memnext_summary_text').text(memory_text);
+
+  summary_element.on('click', function (e) {
+    e.stopPropagation();
+    open_edit_memory_input(i);
+  });
+
+  // Display directly under the message text, before the message buttons
+  const mes_text = div.find('.mes_text');
+  if (mes_text.length > 0) {
+    mes_text.after(summary_element);
+  } else {
+    div.find('.mes_block').append(summary_element);
+  }
 }
 
 export function update_all_message_visuals() {
@@ -154,6 +218,18 @@ export function update_context_budget_displays() {
   $(`.${settings_content_class} #compaction_threshold_tokens_display`).text(threshold_tokens);
 }
 
+// Highlight save icon when active settings differ from saved profile
+export function update_save_icon_highlight() {
+  if (typeof $ === 'undefined') return;
+  const isDirty = detect_settings_difference();
+  const $saveBtn = $(`.${settings_content_class} #save_profile`);
+  if (isDirty) {
+    $saveBtn.addClass('button_highlight');
+  } else {
+    $saveBtn.removeClass('button_highlight');
+  }
+}
+
 // UI Initialization & Binding
 export let promptInterface1 = null;
 export let promptInterface2 = null;
@@ -168,21 +244,24 @@ export function initialize_settings_ui() {
     settings_ui_map[key] = [$el, type];
     if (type === 'boolean') {
       $el.prop('checked', Boolean(get_settings(key)));
-      $el.on('change', function () {
+      $el.off('change.memnext').on('change.memnext', function () {
         set_settings(key, $(this).prop('checked'));
         refresh_memory();
+        update_save_icon_highlight();
       });
     } else if (type === 'number') {
       $el.val(get_settings(key));
-      $el.on('change', function () {
+      $el.off('change.memnext input.memnext').on('change.memnext input.memnext', function () {
         set_settings(key, Number($(this).val()));
         refresh_memory();
+        update_save_icon_highlight();
       });
     } else {
       $el.val(get_settings(key));
-      $el.on('change', function () {
+      $el.off('change.memnext input.memnext').on('change.memnext input.memnext', function () {
         set_settings(key, $(this).val());
         refresh_memory();
+        update_save_icon_highlight();
       });
     }
   };
@@ -272,7 +351,10 @@ export function initialize_settings_ui() {
   $(`.${settings_content_class} #profile`).off('change').on('change', function () {
     load_profile($(this).val());
   });
-  $(`.${settings_content_class} #save_profile`).on('click', () => save_profile());
+  $(`.${settings_content_class} #save_profile`).off('click').on('click', () => {
+    save_profile();
+    update_save_icon_highlight();
+  });
   $(`.${settings_content_class} #restore_profile`).on('click', () => load_profile());
   $(`.${settings_content_class} #rename_profile`).on('click', () => rename_profile());
   $(`.${settings_content_class} #new_profile`).on('click', () => new_profile());
@@ -300,6 +382,7 @@ export function update_connection_profile_dropdown() {
   $dropdown.val(get_settings('connection_profile') || '');
   $dropdown.on('change', function () {
     set_settings('connection_profile', $(this).val());
+    update_save_icon_highlight();
   });
 }
 
@@ -318,6 +401,7 @@ export function refresh_settings() {
   $(`.${settings_content_class} #toggle_chat_memory span`).text(enabled ? (t ? t`Memory: Enabled` : `Memory: Enabled`) : (t ? t`Memory: Disabled` : `Memory: Disabled`));
   $(`.${settings_content_class} #toggle_chat_memory`).toggleClass('button_highlight', enabled);
   update_context_budget_displays();
+  update_save_icon_highlight();
 }
 
 // In-chat Message Buttons
@@ -357,28 +441,7 @@ export function initialize_message_buttons() {
     const mes_div = $(this).closest('.mes');
     const mes_id = Number(mes_div.attr('mesid'));
     if (isNaN(mes_id)) return;
-    const ctx = getContext();
-    const msg = ctx?.chat?.[mes_id];
-    if (!msg) return;
-
-    const current_mem = get_memory(msg) || '';
-    const $edit_box = $(`<textarea class="${css_edit_textarea} text_pole"></textarea>`).val(current_mem);
-    const summary_div = mes_div.find(`div.${summary_div_class}`);
-    if (summary_div.length > 0) {
-      summary_div.replaceWith($edit_box);
-    } else {
-      mes_div.find('.mes_block').append($edit_box);
-    }
-    $edit_box.focus();
-    $edit_box.on('blur', function () {
-      const new_text = $(this).val().trim();
-      set_data(msg, 'memory', new_text || null);
-      set_data(msg, 'edited', true);
-      $edit_box.remove();
-      update_message_visuals(mes_id);
-      refresh_memory();
-      saveChatDebounced();
-    });
+    open_edit_memory_input(mes_id);
   });
 
   $('#message_template .mes_buttons .extraMesButtons').prepend(message_buttons_template);
@@ -508,6 +571,7 @@ export class PromptEditInterface {
     const result = await popup.show();
     if (result) {
       set_settings(this.setting_key, $textarea.val());
+      update_save_icon_highlight();
       toast(`${this.title} saved.`, "success");
     }
   }
@@ -1086,6 +1150,7 @@ export class SummaryPromptEditInterface {
     set_settings('prefill', unescape_string(this.$prefill.val()));
     set_settings('show_prefill', this.$show_prefill.is(':checked'));
     set_settings('summary_prompt_macros', structuredClone(this.macros));
+    update_save_icon_highlight();
     update_all_message_visuals();
   }
 

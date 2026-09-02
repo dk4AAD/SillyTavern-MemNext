@@ -2,6 +2,7 @@
     --memnext-default: grey;
     --memnext-short: #2E8B57;
     --memnext-long: #4682B4;
+    --memnext-old: #8B0000;
     --memnext-excluded: #555555;
     --memnext-redundant-opacity: 50%;
     --memnext-message-removed: grey;
@@ -50,39 +51,70 @@ label.checkbox_label > span:first-child {
     margin-left: 0.2em;
 }
 
-/* Attention-grabbing button highlight */
+/* Attention-grabbing button highlight (vibrant glowing green for save icon with unsaved changes) */
 .button_highlight {
-    color: var(--active);
+    color: #28a745 !important;
+    filter: drop-shadow(0 0 3px rgba(40, 167, 69, 0.7));
+    transition: color 0.2s ease, filter 0.2s ease;
 }
 
-/* Div displaying the memory on a message */
+/* Div displaying the memory on a message directly under the main text */
 .memnext_display {
-    margin: 0 0 5px 0;
-    font-size: small;
-    color: var(--memnext-default);
+    margin: 4px 0 6px 0;
+    font-size: 0.9em;
+    line-height: 1.35;
+    font-style: italic;
+    cursor: pointer;
+    color: var(--memnext-short, #2E8B57);
+    padding: 3px 8px;
+    border-radius: 4px;
+    background-color: rgba(46, 139, 87, 0.08);
+    border-left: 3px solid var(--memnext-short, #2E8B57);
+    display: inline-block;
+    max-width: 100%;
+    word-break: break-word;
+    transition: background-color 0.2s ease, opacity 0.2s ease;
+}
+
+.memnext_display:hover {
+    background-color: rgba(46, 139, 87, 0.16);
+}
+
+.memnext_display .memnext_summary_icon {
+    opacity: 0.75;
+    margin-right: 6px;
+    font-size: 0.85em;
 }
 
 /* Short-term memories */
 .memnext_short_memory {
-    color: var(--memnext-short);
+    color: var(--memnext-short, #2E8B57);
+    border-left-color: var(--memnext-short, #2E8B57);
+    background-color: rgba(46, 139, 87, 0.08);
 }
+
 .memnext_short_memory.memnext_lagging_memory {
-    color: rgba(from var(--memnext-short) r g b / var(--memnext-redundant-opacity));
-    text-shadow: none;
+    opacity: 0.5;
+    border-left-style: dashed;
 }
 
 /* Long-term memories */
 .memnext_long_memory {
-    color: var(--memnext-long);
+    color: var(--memnext-long, #4682B4);
+    border-left-color: var(--memnext-long, #4682B4);
+    background-color: rgba(70, 130, 180, 0.08);
 }
+
 .memnext_long_memory.memnext_lagging_memory {
-    color: rgba(from var(--memnext-long) r g b / var(--memnext-redundant-opacity));
-    text-shadow: none;
+    opacity: 0.5;
+    border-left-style: dashed;
 }
 
 /* Excluded memories */
 .memnext_exclude_memory {
-    color: var(--memnext-excluded);
+    color: var(--memnext-excluded, #555555);
+    border-left-color: var(--memnext-excluded, #555555);
+    background-color: rgba(128, 128, 128, 0.08);
 }
 
 /* Messages removed from context */
@@ -101,8 +133,13 @@ label.checkbox_label > span:first-child {
 
 /* Inline edit textarea */
 .memnext_edit_textarea {
-    margin-top: -6px;
+    margin: 4px 0 6px 0;
     width: 100%;
+    box-sizing: border-box;
+    font-style: italic;
+    font-size: 0.9em;
+    min-height: 2.2em;
+    resize: vertical;
 }
 
 @media all and (max-width: 600px) {

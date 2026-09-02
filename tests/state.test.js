@@ -13,7 +13,9 @@ import {
   save_profile,
   new_profile,
   get_connection_profiles,
-  default_settings
+  default_settings,
+  detect_settings_difference,
+  check_objects_different
 } from '../state.js';
 
 test('state.js: initialize_settings establishes default profile', () => {
@@ -55,6 +57,27 @@ test('state.js: profile management (new_profile, save_profile, load_profile)', (
   load_profile('Default');
   assert.equal(get_settings('profile'), 'Default');
   assert.equal(get_settings('long_term_context_limit'), 20);
+});
+
+test('state.js: detect_settings_difference identifies unsaved changes', () => {
+  load_profile('Default');
+  save_profile('Default');
+  assert.equal(detect_settings_difference('Default'), false);
+
+  // Modify a setting without saving profile
+  set_settings('long_term_context_limit', 45);
+  assert.equal(detect_settings_difference('Default'), true);
+
+  // Save profile and verify difference is cleared
+  save_profile('Default');
+  assert.equal(detect_settings_difference('Default'), false);
+});
+
+test('state.js: check_objects_different works recursively', () => {
+  assert.equal(check_objects_different({ a: 1, b: [2] }, { a: 1, b: [2] }), false);
+  assert.equal(check_objects_different({ a: 1, b: [2] }, { a: 1, b: [3] }), true);
+  assert.equal(check_objects_different('same', 'same'), false);
+  assert.equal(check_objects_different('diff1', 'diff2'), true);
 });
 
 test('state.js: get_connection_profiles returns available mock profiles', () => {

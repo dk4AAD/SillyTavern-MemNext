@@ -10,7 +10,9 @@ import {
   MemoryEditInterface,
   SummaryPromptEditInterface,
   update_message_visuals,
-  update_context_budget_displays
+  update_context_budget_displays,
+  update_save_icon_highlight,
+  open_edit_memory_input
 } from '../ui.js';
 
 test('ui.js: init_interfaces instantiates all modal dialogs', () => {
@@ -48,8 +50,10 @@ test('ui.js: SummaryPromptEditInterface allows macro deletion', () => {
   assert.equal(iface.get_macro('custom_test'), undefined);
 });
 
-test('ui.js: Visual and budget display helpers execute safely without DOM', () => {
+test('ui.js: Visual, save highlight, and budget display helpers execute safely without DOM', () => {
   update_message_visuals(0);
   update_context_budget_displays();
+  update_save_icon_highlight();
+  open_edit_memory_input(0);
   assert.ok(true);
 });

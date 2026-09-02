@@ -108,7 +108,10 @@ export function initialize_settings() {
     soft_reset_settings();
   } else {
     log("Initializing default settings...");
-    extension_settings[MODULE_NAME] = structuredClone(global_settings);
+    extension_settings[MODULE_NAME] = Object.assign(
+      structuredClone(global_settings),
+      structuredClone(default_settings)
+    );
     extension_settings[MODULE_NAME].profiles['Default'] = structuredClone(default_settings);
   }
   if (typeof saveSettingsDebounced === 'function') {
@@ -118,11 +121,19 @@ export function initialize_settings() {
 
 export function soft_reset_settings() {
   if (!extension_settings[MODULE_NAME] || typeof extension_settings[MODULE_NAME] !== 'object') {
-    extension_settings[MODULE_NAME] = structuredClone(global_settings);
+    extension_settings[MODULE_NAME] = Object.assign(
+      structuredClone(global_settings),
+      structuredClone(default_settings)
+    );
   }
   for (let key of Object.keys(global_settings)) {
     if (extension_settings[MODULE_NAME][key] === undefined) {
       extension_settings[MODULE_NAME][key] = structuredClone(global_settings[key]);
+    }
+  }
+  for (let key of Object.keys(default_settings)) {
+    if (extension_settings[MODULE_NAME][key] === undefined) {
+      extension_settings[MODULE_NAME][key] = structuredClone(default_settings[key]);
     }
   }
   const profiles = extension_settings[MODULE_NAME].profiles;
@@ -131,44 +142,74 @@ export function soft_reset_settings() {
       'Default': structuredClone(default_settings)
     };
   }
-  for (let profile of Object.values(extension_settings[MODULE_NAME].profiles)) {
-    if (!profile || typeof profile !== 'object') continue;
-    for (let key of Object.keys(default_settings)) {
-      if (profile[key] === undefined) {
-        profile[key] = structuredClone(default_settings[key]);
-      }
-    }
-  }
 }
 
 export function get_settings(key = null) {
   const ext = extension_settings[MODULE_NAME];
-  if (!ext) return key ? default_settings[key] : default_settings;
-  if (key === 'profile') return ext.profile || 'Default';
-  if (key in global_settings) return ext[key];
-  const current_profile = ext.profile || 'Default';
-  const profile_settings = ext.profiles?.[current_profile] || ext.profiles?.['Default'];
-  if (key === null) return profile_settings || default_settings;
-  return profile_settings?.[key] !== undefined ? profile_settings[key] : default_settings[key];
+  if (!ext) return key !== null ? default_settings[key] : default_settings;
+  if (key === null) {
+    return ext;
+  }
+  let value = ext[key];
+  if (value !== undefined) return value;
+  if (key in default_settings) return default_settings[key];
+  if (key in global_settings) return global_settings[key];
+  return undefined;
 }
 
 export function set_settings(key, value) {
-  const ext = extension_settings[MODULE_NAME];
-  if (!ext) return;
-  if (key === 'profile') {
-    ext.profile = value;
-  } else if (key in global_settings) {
-    ext[key] = value;
-  } else {
-    const current_profile = ext.profile || 'Default';
-    if (!ext.profiles[current_profile]) {
-      ext.profiles[current_profile] = structuredClone(default_settings);
-    }
-    ext.profiles[current_profile][key] = value;
+  if (!extension_settings[MODULE_NAME]) {
+    extension_settings[MODULE_NAME] = Object.assign(
+      structuredClone(global_settings),
+      structuredClone(default_settings)
+    );
   }
+  extension_settings[MODULE_NAME][key] = value;
   if (typeof saveSettingsDebounced === 'function') {
     saveSettingsDebounced();
   }
+}
+
+// Track settings changes compared to current saved profile
+export function copy_settings(profile = null) {
+  let settings;
+  const ext = extension_settings[MODULE_NAME] || {};
+  if (!profile) {
+    settings = structuredClone(ext);
+  } else {
+    let profiles = ext.profiles || {};
+    if (profiles[profile] === undefined) {
+      if (profile === 'Default') {
+        return structuredClone(default_settings);
+      }
+      return {};
+    }
+    settings = structuredClone(profiles[profile]);
+  }
+  for (let key of Object.keys(global_settings)) {
+    delete settings[key];
+  }
+  return settings;
+}
+
+export function check_objects_different(obj_1, obj_2) {
+  if (obj_1 instanceof Object && obj_2 instanceof Object) {
+    let keys = Array.from(new Set([...Object.keys(obj_1), ...Object.keys(obj_2)]));
+    for (let key of keys) {
+      if (check_objects_different(obj_1[key], obj_2[key])) {
+        return true;
+      }
+    }
+    return false;
+  }
+  return obj_1 !== obj_2;
+}
+
+export function detect_settings_difference(profile = null) {
+  if (!profile) profile = get_settings('profile');
+  let current_settings = copy_settings();
+  let profile_settings = copy_settings(profile);
+  return check_objects_different(current_settings, profile_settings);
 }
 
 export function get_character_profile() {
@@ -279,20 +320,31 @@ export function save_profile(profile = null) {
   if (!profile) profile = get_settings('profile');
   log("Saving Configuration Profile: " + profile);
   let profiles = get_settings('profiles') || {};
-  profiles[profile] = structuredClone(get_settings());
+  let settings = copy_settings();
+  profiles[profile] = settings;
   set_settings('profiles', profiles);
   if (typeof toastr !== 'undefined') toastr.success(`Saved profile "${profile}"`);
+  notify_ui_refresh();
 }
 
 export function load_profile(profile = null) {
-  if (!profile) profile = get_settings('profile');
-  const ext = extension_settings[MODULE_NAME];
-  if (!ext || !ext.profiles[profile]) {
-    error("Profile not found: " + profile);
-    return;
+  let current_profile = get_settings('profile');
+  if (!profile) profile = current_profile || 'Default';
+  let settings = copy_settings(profile);
+  if (!Object.keys(settings).length) {
+    if (profile === 'Default') {
+      let profiles = get_settings('profiles') || {};
+      profiles['Default'] = structuredClone(default_settings);
+      set_settings('profiles', profiles);
+      settings = structuredClone(default_settings);
+    } else {
+      error("Profile not found: " + profile);
+      return;
+    }
   }
-  let current_profile = ext.profile;
-  ext.profile = profile;
+  log("Loading Configuration Profile: " + profile);
+  Object.assign(extension_settings[MODULE_NAME], settings);
+  set_settings('profile', profile);
   if (typeof saveSettingsDebounced === 'function') {
     saveSettingsDebounced();
   }
@@ -359,6 +411,7 @@ export async function rename_profile() {
   set_settings('character_profiles', character_profiles);
   log(`Renamed profile [${old_name}] to [${new_name}]`);
   update_profile_section();
+  notify_ui_refresh();
 }
 
 export function new_profile() {
