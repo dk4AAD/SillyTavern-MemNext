@@ -2660,6 +2660,26 @@ class SummaryPromptEditInterface {
         // Returns a list of message objects, i.e.: [{role: '', content: ''}, ...]
         // If macro evaluated empty, returns null
 
+        // check for dynamic macros
+        if (name.startsWith("crop_history_")) {
+            let num = parseInt(name.split("_").pop())
+            if (num && !isNaN(num)) {
+                let dynamic_macro = {
+                    name: name,
+                    type: "preset",
+                    instruct_template: true,
+                    start: 1,
+                    end: num,
+                    bot_messages: true,
+                    user_messages: true,
+                    bot_summaries: false,
+                    user_summaries: false,
+                    enabled: true
+                }
+                return this.compute_range_macro(index, dynamic_macro)
+            }
+        }
+
         let macro = this.get_macro(name)
         if (!macro) return  // macro doesn't exist
         if (!macro.enabled && !ignore_enabled) return
@@ -2761,6 +2781,9 @@ class SummaryPromptEditInterface {
         if (prompt === null) {
             prompt = get_settings('message_summary_prompt')
         }
+
+        // preprocess dynamic arguments
+        prompt = prompt.replace(/(\{\{\s*#?if\s+|\{\{\s*)crop_history\s+(\d+)(\s*}})/g, "$1crop_history_$2$3")
 
         // map of macros used in the prompt to their values
         let macros = await this.compute_used_macros(index, prompt)
