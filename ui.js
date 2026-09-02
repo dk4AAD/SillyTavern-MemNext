@@ -660,11 +660,13 @@ export class SummaryPromptEditInterface {
   macro_definition_template = `
 <div class="macro_definition qvink_interface_card">
 <div class="inline-drawer">
-    <div class="inline-drawer-header">
-        <div class="flex-container alignitemscenter margin0 flex1">
+    <div class="inline-drawer-header flex-container alignitemscenter justifySpaceBetween">
+        <div class="flex-container alignitemscenter margin0 flex1" style="gap: 5px; margin-right: 5px;">
             <button class="macro_enable menu_button fa-solid margin0"></button>
             <button class="macro_preview menu_button fa-solid fa-eye margin0" title="Preview the result of this macro"></button>
             <input class="macro_name flex1 text_pole" type="text" placeholder="name">
+            <button class="macro_restore menu_button red_button fa-solid fa-recycle margin0" title="Restore default macro"></button>
+            <button class="macro_delete menu_button red_button fa-solid fa-trash margin0" title="Delete macro"></button>
         </div>
         <div class="inline-drawer-toggle">
             <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
@@ -734,9 +736,6 @@ export class SummaryPromptEditInterface {
                 <input class="macro_instruct_template" type="checkbox">
                 <span>Separate Block</span>
             </label>
-
-            <button class="macro_delete menu_button red_button fa-solid fa-trash" title="Delete custom macro" style="margin-left: auto;"></button>
-            <button class="macro_restore menu_button red_button fa-solid fa-recycle" title="Restore default macro" style="margin-left: auto;"></button>
         </div>
 
     </div>
@@ -831,14 +830,15 @@ export class SummaryPromptEditInterface {
       $macro.attr('id', id);
     }
 
-    let radio_group_name = `macro_type_radio_${macro.name}`;
+    let safe_macro_name = String(macro.name).replace(/[^a-zA-Z0-9_-]/g, '_');
+    let radio_group_name = `macro_type_radio_${safe_macro_name}`;
     $macro.find(`.macro_type input`).attr('name', radio_group_name);
 
     let $range_div = $macro.find(".macro_type_range");
     let $message_div = $macro.find(".macro_type_message");
     let $script_div = $macro.find(".macro_type_script");
     let $macro_type_div = $macro.find('.macro_type');
-    let $macro_type_radios = $macro.find(`input[name=${radio_group_name}]`);
+    let $macro_type_radios = $macro.find(`input[name="${radio_group_name}"]`);
     let $macro_preset_start = $macro.find(".macro_preset_start");
     let $macro_preset_end = $macro.find(".macro_preset_end");
     let $macro_preset_bot_messages = $macro.find(".macro_preset_bot_messages");
@@ -904,18 +904,25 @@ export class SummaryPromptEditInterface {
       $macro_type_div.remove();
       $range_div.remove();
       $script_div.remove();
+      $macro.find('.inline-drawer-toggle').hide();
+      $macro.find('.inline-drawer-content').remove();
     }
+
+    // Both default and custom macros can be deleted
+    $delete.on('click', (e) => {
+      e.stopPropagation();
+      delete this.macros[macro.name];
+      $macro.remove();
+    });
 
     if (macro.default) {
       $name.prop('disabled', true);
-      $delete.remove();
-      $restore.on('click', () => this.restore_macro_default(macro.name));
+      $restore.on('click', (e) => {
+        e.stopPropagation();
+        this.restore_macro_default(macro.name);
+      });
     } else {
       $restore.remove();
-      $delete.on('click', () => {
-        delete this.macros[macro.name];
-        $macro.remove();
-      });
     }
 
     $name.val(macro.name);
@@ -935,7 +942,7 @@ export class SummaryPromptEditInterface {
       $name.val(new_name);
     });
 
-    $macro_type_radios.filter(`[value=${macro.type}]`).prop('checked', true);
+    $macro_type_radios.filter(`[value="${macro.type}"]`).prop('checked', true);
     $macro_type_radios.on('change', () => {
       macro.type = $macro_type_radios.filter(':checked').val();
       show_settings_div();
@@ -998,6 +1005,8 @@ export class SummaryPromptEditInterface {
     $macro_command_script.on('change', () => {
       macro.command = $macro_command_script.val();
     });
+
+    return $macro;
   }
 
   restore_macro_default(name) {
@@ -1093,7 +1102,8 @@ export class SummaryPromptEditInterface {
   }
 
   get_id(name) {
-    return `summary_macro_definition_${name || 'unnamed'}`;
+    const clean = String(name || 'unnamed').replace(/[^a-zA-Z0-9_-]/g, '_');
+    return `summary_macro_definition_${clean}`;
   }
 
   list_macros() {
@@ -1109,7 +1119,13 @@ export class SummaryPromptEditInterface {
     if (name) macro.name = name;
     macro.name = this.get_unique_name(macro.name);
     this.macros[macro.name] = macro;
-    this.create_macro_interface(macro);
+    const $macro = this.create_macro_interface(macro);
+    if ($macro && typeof $macro.find === 'function') {
+      $macro.find('>.inline-drawer >.inline-drawer-content').show();
+      $macro.find('>.inline-drawer >.inline-drawer-header .inline-drawer-icon')
+        .removeClass('down fa-circle-chevron-down')
+        .addClass('up fa-circle-chevron-up');
+    }
   }
 }
 
