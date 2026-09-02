@@ -5,7 +5,8 @@ import {
   summaryQueue,
   summarize_text,
   on_chat_event,
-  get_summary_max_tokens
+  get_summary_max_tokens,
+  clean_llm_reasoning_tags
 } from '../summarization.js';
 
 test('summarization.js: SummaryQueue class and singleton instance', () => {
@@ -18,6 +19,29 @@ test('summarization.js: SummaryQueue class and singleton instance', () => {
   summaryQueue.clear();
   assert.deepEqual(summaryQueue.tasks, []);
   assert.equal(summaryQueue.aborted, true);
+});
+
+test('summarization.js: clean_llm_reasoning_tags strips Gemma 4 channel thought tags', () => {
+  // Empty thought channel
+  const emptyTag = "<|channel>thought\n<channel|>Alice and Bob agreed to go to the park.";
+  assert.equal(clean_llm_reasoning_tags(emptyTag), "Alice and Bob agreed to go to the park.");
+
+  // Non-empty thought channel
+  const populatedTag = "<|channel>thought\nLet me summarize this message briefly.\n<channel|>Alice and Bob agreed to go to the park.";
+  assert.equal(clean_llm_reasoning_tags(populatedTag), "Alice and Bob agreed to go to the park.");
+
+  // Unclosed or trailing thought channel
+  const unclosedTag = "<|channel>thought\nStill thinking...";
+  assert.equal(clean_llm_reasoning_tags(unclosedTag), "");
+});
+
+test('summarization.js: clean_llm_reasoning_tags strips DeepSeek and standard think tags', () => {
+  const deepseek = "<think>Analyze the conversation history.</think>Summary content here.";
+  assert.equal(clean_llm_reasoning_tags(deepseek), "Summary content here.");
+
+  const customTemplate = { prefix: ">>>THINK\n", suffix: "<<<THINK" };
+  const customStr = ">>>THINK\nInternal reasoning steps\n<<<THINKActual final summary.";
+  assert.equal(clean_llm_reasoning_tags(customStr, customTemplate), "Actual final summary.");
 });
 
 test('summarization.js: summarize_text produces output via mock LLM', async () => {

@@ -116,32 +116,132 @@ export class SummaryQueue {
 
 export const summaryQueue = new SummaryQueue();
 
+function escapeRegex(string) {
+  return String(string || '').replace(/[/\-\\^$*+?.()|[\]{}]/g, '\\$&');
+}
+
+// Clean reasoning, thoughts, and channel tags from LLM outputs
+export function clean_llm_reasoning_tags(text, template = null) {
+  if (typeof text !== 'string') return '';
+  let str = text;
+
+  // 1. If a specific reasoning template with prefix & suffix is provided
+  if (template?.prefix && template?.suffix) {
+    const p = escapeRegex(template.prefix);
+    const s = escapeRegex(template.suffix);
+    str = str.replace(new RegExp(`${p}[\\s\\S]*?${s}`, 'g'), '');
+    str = str.replace(new RegExp(`^\\s*${p}`, 'g'), '');
+    str = str.replace(new RegExp(`${s}`, 'g'), '');
+  }
+
+  // 2. Strip Gemma 4 and general channel thought tags: <|channel>thought ... <channel|>
+  str = str.replace(/<\|channel\>thought[\s\S]*?<channel\|>/gi, '');
+  str = str.replace(/<\|channel\>thought[\s\S]*?$/i, '');
+  str = str.replace(/<\|channel\>thought\s*/gi, '');
+  str = str.replace(/<channel\|>\s*/gi, '');
+
+  // 3. Strip DeepSeek / Qwen think tags: <think> ... </think>
+  str = str.replace(/<think>[\s\S]*?<\/think>/gi, '');
+  str = str.replace(/<think>[\s\S]*?$/i, '');
+  str = str.replace(/<\/think>\s*/gi, '');
+
+  // 4. Strip alternative thought tags: <|thought|> ... </|thought|> or <thought> ... </thought>
+  str = str.replace(/<\|thought\|>[\s\S]*?<\/\|thought\|>/gi, '');
+  str = str.replace(/<\|thought\|>[\s\S]*?<\|\/thought\|>/gi, '');
+  str = str.replace(/<thought>[\s\S]*?<\/thought>/gi, '');
+
+  return str.trim();
+}
+
 // LLM Interaction for Summarization
 export async function summarize_text(messages, streaming = false) {
-  const profile_id = get_active_connection_profile()?.id;
+  const profile = get_active_connection_profile();
+  const profile_id = profile?.id;
   const context = getContext();
-  let prompt;
-  if (profile_id && context?.ConnectionManagerRequestService) {
-    prompt = context.ConnectionManagerRequestService.constructPrompt(messages, profile_id);
-  } else {
-    prompt = messages.map(m => `${m.role}: ${m.content}`).join('\n\n');
-  }
 
-  const hash = typeof getStringHash === 'function' ? getStringHash(JSON.stringify(messages)) : null;
-  const generate_options = {
-    custom_model: profile_id,
-    prompt_hash: hash
-  };
+  let rawContent = '';
+  let rawReasoning = '';
 
-  try {
-    if (typeof generateRaw === 'function') {
-      const response = await generateRaw(prompt, main_api, false, false, generate_options);
-      return typeof response === 'string' ? response.trim() : (response?.text || '').trim();
+  // 1. Prefer Tavern's ConnectionManagerRequestService if available
+  if (profile_id && context?.ConnectionManagerRequestService?.sendRequest) {
+    try {
+      const max_tokens = get_summary_max_tokens();
+      const response = await context.ConnectionManagerRequestService.sendRequest(
+        profile_id,
+        messages,
+        max_tokens,
+        { extractData: true, includePreset: true, stream: false }
+      );
+      if (typeof response === 'string') {
+        rawContent = response;
+      } else if (response && typeof response === 'object') {
+        rawContent = response.content || response.text || '';
+        rawReasoning = response.reasoning || '';
+      }
+    } catch (err) {
+      debug(`ConnectionManagerRequestService sendRequest failed, falling back to generateRaw: ${err}`);
     }
-  } catch (err) {
-    debug(`Generate raw failed, falling back: ${err}`);
   }
-  return `[Summary of: ${prompt.slice(0, 80)}...]`;
+
+  // 2. Fallback to generateRaw if sendRequest did not produce output
+  if (!rawContent) {
+    let prompt;
+    if (profile_id && context?.ConnectionManagerRequestService?.constructPrompt) {
+      prompt = context.ConnectionManagerRequestService.constructPrompt(messages, profile_id);
+    } else {
+      prompt = messages.map(m => `${m.role}: ${m.content}`).join('\n\n');
+    }
+
+    const hash = typeof getStringHash === 'function' ? getStringHash(JSON.stringify(messages)) : null;
+    const generate_options = {
+      custom_model: profile_id,
+      prompt_hash: hash
+    };
+
+    try {
+      if (typeof generateRaw === 'function') {
+        const response = await generateRaw(prompt, main_api, false, false, generate_options);
+        rawContent = typeof response === 'string' ? response.trim() : (response?.text || '').trim();
+      }
+    } catch (err) {
+      debug(`Generate raw failed: ${err}`);
+    }
+  }
+
+  if (!rawContent) {
+    return `[Summary of: ${JSON.stringify(messages).slice(0, 80)}...]`;
+  }
+
+  // 3. Process reasoning template if defined in profile or SillyTavern settings
+  const template_name = profile?.['reasoning-template'] || profile?.reasoningTemplate;
+  let template = null;
+  if (template_name && typeof context?.getReasoningTemplateByName === 'function') {
+    template = context.getReasoningTemplateByName(template_name);
+  }
+  if (!template && context?.power_user?.reasoning) {
+    template = context.power_user.reasoning;
+  }
+
+  if (template && typeof context?.parseReasoningFromString === 'function') {
+    try {
+      const parsed = context.parseReasoningFromString(rawContent, { strict: false }, template);
+      if (parsed && typeof parsed.content === 'string' && parsed.content.length > 0) {
+        rawContent = parsed.content;
+      }
+    } catch (e) {
+      debug(`parseReasoningFromString error: ${e}`);
+    }
+  }
+
+  // 4. Clean any residual reasoning/channel tags (e.g. <|channel>thought\n<channel|>)
+  let cleanContent = clean_llm_reasoning_tags(rawContent, template);
+
+  // 5. Trim to end sentence if powerUserSettings.trim_sentences is active
+  if (context?.powerUserSettings?.trim_sentences && typeof trimToEndSentence === 'function') {
+    cleanContent = trimToEndSentence(cleanContent);
+  }
+
+  return cleanContent || rawContent.trim();
 }
 
 export async function summarize_message(index) {
