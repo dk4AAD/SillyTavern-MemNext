@@ -239,8 +239,8 @@ export function clean_llm_reasoning_tags(text, template = null) {
   str = str.replace(/<\/think>\s*/gi, '');
 
   // 4. Strip alternative thought tags: <|thought|> ... </|thought|> or <thought> ... </thought>
-  str = str.replace(/<\|thought\|>[\s\S]*?<\/\|thought\|>/gi, '');
-  str = str.replace(/<\|thought\|>[\s\S]*?<\|\/thought\|>/gi, '');
+  str = str.replace(/<|thought\|>[\s\S]*?<\/\|thought\|>/gi, '');
+  str = str.replace(/<|thought\|>[\s\S]*?<\|\/thought\|>/gi, '');
   str = str.replace(/<thought>[\s\S]*?<\/thought>/gi, '');
 
   return str.trim();
@@ -454,7 +454,11 @@ export async function on_chat_event(event, data = null) {
       if (data !== null && data !== undefined) {
         update_message_visuals(Number(data));
       }
-      await auto_summarize_chat();
+      // Defer auto-summarization to the next tick so SillyTavern finishes rendering
+      // and the browser immediately paints/prints the message in chat.
+      setTimeout(async () => {
+        await auto_summarize_chat();
+      }, 0);
       break;
     case 'message_edited':
       if (data !== null && data !== undefined) {
