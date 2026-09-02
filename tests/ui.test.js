@@ -5,6 +5,8 @@ import {
   promptInterface1,
   promptInterface2,
   promptInterface3,
+  promptInterfaceLongTemplate,
+  promptInterfaceShortTemplate,
   memoryEditInterface,
   PromptEditInterface,
   MemoryEditInterface,
@@ -18,11 +20,17 @@ import {
 import { set_injection_threshold_index } from '../memory.js';
 import { chat_metadata, mockChat } from './mocks/sillytavern.js';
 
-test('ui.js: init_interfaces instantiates all modal dialogs', () => {
+test('ui.js: init_interfaces instantiates all modal dialogs including injection templates', () => {
   init_interfaces();
   assert.ok(promptInterface1 instanceof SummaryPromptEditInterface);
   assert.ok(promptInterface2 instanceof PromptEditInterface);
   assert.ok(promptInterface3 instanceof PromptEditInterface);
+  assert.ok(promptInterfaceLongTemplate instanceof PromptEditInterface);
+  assert.ok(promptInterfaceShortTemplate instanceof PromptEditInterface);
+  assert.equal(promptInterfaceLongTemplate.setting_key, 'long_template');
+  assert.equal(promptInterfaceShortTemplate.setting_key, 'short_template');
+  assert.deepEqual(promptInterfaceLongTemplate.macros, [{ name: 'memories', desc: 'The consolidated long-term memory narrative.' }]);
+  assert.deepEqual(promptInterfaceShortTemplate.macros, [{ name: 'memories', desc: 'The active short-term rolling summaries joined by the separator.' }]);
   assert.ok(memoryEditInterface instanceof MemoryEditInterface);
 });
 

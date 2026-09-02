@@ -56,9 +56,9 @@
 
                 <!-- Profile-specific Options Container (Hidden when profile is disabled) -->
                 <div id="memnext_profile_options">
-                    <!-- Prompt Templates (3 Windows) -->
+                    <!-- Prompt Templates (5 Windows) -->
                     <hr>
-                    <h4 class="textAlignCenter">Prompt Templates <i class="fa-solid fa-info-circle" title="Three separate prompt templates: message summary, short-to-long compaction, and long-term consolidation."></i></h4>
+                    <h4 class="textAlignCenter">Prompt Templates <i class="fa-solid fa-info-circle" title="Templates for summarization prompts, memory compaction, and memory injection framing."></i></h4>
                     <div class="flex-container justifyspacebetween alignitemscenter" style="margin-bottom: 5px;">
                         <span class="flex2" style="font-weight: 500;">1. Message Summary Prompt</span>
                         <button id="edit_message_summary_prompt" class="menu_button flex1" title="Edit prompt used to summarize individual messages">Edit</button>
@@ -70,6 +70,14 @@
                     <div class="flex-container justifyspacebetween alignitemscenter" style="margin-bottom: 5px;">
                         <span class="flex2" style="font-weight: 500;">3. Long-Term Re-compaction</span>
                         <button id="edit_long_compaction_prompt" class="menu_button flex1" title="Edit prompt used to re-compact long-term memory when budget overflows">Edit</button>
+                    </div>
+                    <div class="flex-container justifyspacebetween alignitemscenter" style="margin-bottom: 5px;">
+                        <span class="flex2" style="font-weight: 500;">4. Long-Term Injection Template</span>
+                        <button id="edit_long_template" class="menu_button flex1" title="Edit template framing long-term memory for injection">Edit</button>
+                    </div>
+                    <div class="flex-container justifyspacebetween alignitemscenter" style="margin-bottom: 5px;">
+                        <span class="flex2" style="font-weight: 500;">5. Short-Term Injection Template</span>
+                        <button id="edit_short_template" class="menu_button flex1" title="Edit template framing short-term memory for injection">Edit</button>
                     </div>
 
                     <!-- Summarization API & Execution -->
@@ -126,24 +134,9 @@
                         <span>Auto Summarize</span>
                     </label>
 
-                    <label class="checkbox_label" title="Auto-summarization will be triggered before generation instead of after.">
-                        <input id="auto_summarize_on_send" type="checkbox" />
-                        <span>Before Generation</span>
-                    </label>
-
                     <label title="Show the progress bar when auto-summarizing." class="checkbox_label">
                         <input id="auto_summarize_progress" type="checkbox" />
                         <span>Progress Bar</span>
-                    </label>
-
-                    <label class="checkbox_label" title="Number of valid messages to wait before auto-summarizing (0 = summarize up to newest).">
-                        <input id="summarization_delay" class="text_pole widthUnset inline_setting" type="number" min="0" max="999" />
-                        <span>Message Lag</span>
-                    </label>
-
-                    <label class="checkbox_label" title="Wait until this many valid messages before auto-summarizing them all in batch.">
-                        <input id="auto_summarize_batch_size" class="text_pole widthUnset inline_setting" type="number" min="1" max="999" />
-                        <span>Batch Size</span>
                     </label>
 
                     <label class="checkbox_label" title="Maximum lookback messages to summarize (-1 = check whole dialogue from start).">

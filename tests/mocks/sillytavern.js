@@ -123,7 +123,10 @@ export function dragElement() {}
 export const debounce_timeout = { relaxed: 50 };
 
 export const MacrosParser = {
-  registerMacro: () => {}
+  registeredMacros: {},
+  registerMacro: (name, fn) => {
+    MacrosParser.registeredMacros[name] = fn;
+  }
 };
 export const itemizedPrompts = [];
 export function t(strings, ...values) {

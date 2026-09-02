@@ -166,14 +166,13 @@ export class SummaryQueue {
     }
 
     const concurrency = Number(get_settings('parallel_summaries_count')) || 1;
-    const batch_size = Number(get_settings('auto_summarize_batch_size')) || 1;
     this.completed_tasks = 0;
     this.total_tasks = this.tasks.length;
     this.show_progress(this.completed_tasks, this.total_tasks, "Summarizing...");
 
     const workers = [];
     for (let i = 0; i < concurrency; i++) {
-      workers.push(this.worker(batch_size));
+      workers.push(this.worker());
     }
     await Promise.all(workers);
     this.queue_running = false;
@@ -192,36 +191,30 @@ export class SummaryQueue {
     saveChatDebounced();
   }
 
-  async worker(batch_size) {
+  async worker() {
     while (this.tasks.length > 0 && !this.aborted) {
-      const batch = this.tasks.splice(0, batch_size);
-      for (const mes_id of batch) {
-        if (this.aborted) break;
+      const mes_id = this.tasks.shift();
+      if (mes_id === undefined || mes_id === null) break;
 
-        // Rate limiting: summarization_time_delay (in seconds)
-        const time_delay_s = Number(get_settings('summarization_time_delay')) || 0;
-        if (time_delay_s > 0 && !this.aborted) {
-          const skip_first = Boolean(get_settings('summarization_time_delay_skip_first')) && this.completed_tasks === 0;
-          if (!skip_first && this.last_summary_request_time > 0) {
-            const elapsed = Date.now() - this.last_summary_request_time;
-            const required_delay = time_delay_s * 1000;
-            if (elapsed < required_delay) {
-              const wait_ms = required_delay - elapsed;
-              this.show_progress(this.completed_tasks, this.total_tasks, `Waiting ${Math.ceil(wait_ms / 1000)}s...`);
-              await new Promise(r => setTimeout(r, wait_ms));
-            }
+      // Rate limiting: summarization_time_delay (in seconds)
+      const time_delay_s = Number(get_settings('summarization_time_delay')) || 0;
+      if (time_delay_s > 0 && !this.aborted) {
+        const skip_first = Boolean(get_settings('summarization_time_delay_skip_first')) && this.completed_tasks === 0;
+        if (!skip_first && this.last_summary_request_time > 0) {
+          const elapsed = Date.now() - this.last_summary_request_time;
+          const required_delay = time_delay_s * 1000;
+          if (elapsed < required_delay) {
+            const wait_ms = required_delay - elapsed;
+            this.show_progress(this.completed_tasks, this.total_tasks, `Waiting ${Math.ceil(wait_ms / 1000)}s...`);
+            await new Promise(r => setTimeout(r, wait_ms));
           }
         }
+      }
 
-        if (this.aborted) break;
-        await summarize_message(mes_id);
-        this.last_summary_request_time = Date.now();
-        this.step_progress("Summarizing...");
-      }
-      const delay = Number(get_settings('summarization_delay')) || 0;
-      if (delay > 0 && !this.aborted) {
-        await new Promise(r => setTimeout(r, delay));
-      }
+      if (this.aborted) break;
+      await summarize_message(mes_id);
+      this.last_summary_request_time = Date.now();
+      this.step_progress("Summarizing...");
     }
   }
 }
@@ -518,12 +511,6 @@ export async function on_chat_event(event, data = null) {
       if (chat_metadata?.memnext) chat_metadata.memnext.iti = null;
       refresh_memory();
       update_all_message_visuals();
-      break;
-    case 'before_message':
-      if (get_settings('auto_summarize_on_send')) {
-        await auto_summarize_chat();
-        await refresh_memory();
-      }
       break;
   }
 }

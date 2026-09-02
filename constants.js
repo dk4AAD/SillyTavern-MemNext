@@ -24,9 +24,9 @@ export const edit_button_class = `${MODULE_NAME}_edit_button`;
 export const forget_button_class = `${MODULE_NAME}_forget_button`;
 
 // Macros for memory injection
-export const long_memory_macro = `memnext-long-term-memory`;
-export const short_memory_macro = `memnext-short-term-memory`;
-export const generic_memories_macro = `memnext-memories`;
+export const long_memory_macro = `memnext_long`;
+export const short_memory_macro = `memnext_short`;
+export const generic_memories_macro = `memories`;
 
 // Interceptor symbol
 export const IGNORE_SYMBOL = Symbol('memnext_ignore');

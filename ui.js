@@ -83,6 +83,8 @@ import {
 import {
   default_short_to_long_prompt,
   default_long_compaction_prompt,
+  default_long_template,
+  default_short_template,
   default_summary_macros,
   default_macro_settings,
   create_summary_prompt,
@@ -267,6 +269,8 @@ export function update_save_icon_highlight() {
 export let promptInterface1 = null;
 export let promptInterface2 = null;
 export let promptInterface3 = null;
+export let promptInterfaceLongTemplate = null;
+export let promptInterfaceShortTemplate = null;
 export let memoryEditInterface = null;
 
 export function initialize_settings_ui() {
@@ -309,7 +313,6 @@ export function initialize_settings_ui() {
   bind_input('auto_summarize_on_continue', 'auto_summarize_on_continue', 'boolean');
   bind_input('block_chat', 'block_chat', 'boolean');
   bind_input('auto_summarize_progress', 'auto_summarize_progress', 'boolean');
-  bind_input('auto_summarize_on_send', 'auto_summarize_on_send', 'boolean');
   bind_input('include_user_messages', 'include_user_messages', 'boolean');
   bind_input('include_system_messages', 'include_system_messages', 'boolean');
   bind_input('include_narrator_messages', 'include_narrator_messages', 'boolean');
@@ -320,8 +323,6 @@ export function initialize_settings_ui() {
   bind_input('summarization_time_delay_skip_first', 'summarization_time_delay_skip_first', 'boolean');
   bind_input('parallel_summaries_count', 'parallel_summaries_count', 'number');
   bind_input('summarization_time_delay', 'summarization_time_delay', 'number');
-  bind_input('summarization_delay', 'summarization_delay', 'number');
-  bind_input('auto_summarize_batch_size', 'auto_summarize_batch_size', 'number');
   bind_input('auto_summarize_message_limit', 'auto_summarize_message_limit', 'number');
   bind_input('long_term_context_limit', 'long_term_context_limit', 'number');
   bind_input('short_term_context_limit', 'short_term_context_limit', 'number');
@@ -337,6 +338,8 @@ export function initialize_settings_ui() {
   $(`.${settings_content_class} #edit_message_summary_prompt`).on('click', () => promptInterface1?.show());
   $(`.${settings_content_class} #edit_short_to_long_prompt`).on('click', () => promptInterface2?.show());
   $(`.${settings_content_class} #edit_long_compaction_prompt`).on('click', () => promptInterface3?.show());
+  $(`.${settings_content_class} #edit_long_template`).on('click', () => promptInterfaceLongTemplate?.show());
+  $(`.${settings_content_class} #edit_short_template`).on('click', () => promptInterfaceShortTemplate?.show());
 
   // Top action buttons
   $(`.${settings_content_class} #toggle_chat_memory`).on('click', toggle_chat_enabled);
@@ -461,10 +464,9 @@ export function initialize_chat_menu_buttons() {
   $btn.on('click', () => {
     const current = get_settings('display_memories');
     set_settings('display_memories', !current);
-    save_profile(get_settings('profile'));
+    save_profile(get_settings('profile'), true);
     $(`.${settings_content_class} #display_memories`).prop('checked', !current);
     update_all_message_visuals();
-    toast(`Memory display ${!current ? 'enabled' : 'disabled'}.`, "info");
   });
 
   $extensions_menu.append($btn);
@@ -1286,6 +1288,24 @@ export function init_interfaces() {
     macros: [
       { name: 'long_memory', desc: 'The combined long-term narrative that needs to be compacted.' },
       { name: 'long_term_memory_size', desc: 'The current token size of the combined long-term memory.' }
+    ]
+  });
+  promptInterfaceLongTemplate = new PromptEditInterface({
+    setting_key: 'long_template',
+    title: 'Long-Term Injection Template',
+    description: 'Template used to frame the consolidated long-term memory narrative before injection into the prompt.',
+    default_prompt: default_long_template,
+    macros: [
+      { name: 'memories', desc: 'The consolidated long-term memory narrative.' }
+    ]
+  });
+  promptInterfaceShortTemplate = new PromptEditInterface({
+    setting_key: 'short_template',
+    title: 'Short-Term Injection Template',
+    description: 'Template used to frame the rolling short-term summaries before injection into the prompt.',
+    default_prompt: default_short_template,
+    macros: [
+      { name: 'memories', desc: 'The active short-term rolling summaries joined by the separator.' }
     ]
   });
   memoryEditInterface = new MemoryEditInterface();

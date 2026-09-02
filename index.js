@@ -48,23 +48,24 @@ export function initialize_slash_commands() {
 
   SlashCommandParser.addCommandObject(SlashCommand.fromProps({
     name: 'memnext-refresh',
-    callback: () => {
-      refresh_memory();
-      return 'MemNext memory state refreshed.';
+    callback: async () => {
+      await refresh_memory();
+      return 'MemNext memory and inclusion flags refreshed.';
     },
-    helpString: 'Recalculate inclusion boundaries and refresh injections.'
+    helpString: 'Force a full refresh of MemNext memories and prompt injections.'
   }));
 
   SlashCommandParser.addCommandObject(SlashCommand.fromProps({
     name: 'memnext-summarize',
-    callback: async args => {
-      const ctx = getContext();
-      const last = ctx?.chat?.length ? ctx.chat.length - 1 : 0;
-      const index = args?.index !== undefined ? Number(args.index) : last;
-      await summarize_message(index);
-      return `Summarized message ID ${index}.`;
+    callback: async (args) => {
+      const idx = args?.index !== undefined ? Number(args.index) : null;
+      if (idx !== null && !isNaN(idx)) {
+        await summarize_message(idx);
+        return `Summarized message ${idx}.`;
+      }
+      return 'Please provide a valid message index.';
     },
-    helpString: 'Summarize a message by index (defaults to latest message).'
+    helpString: 'Summarize a specific message by index.'
   }));
 
   SlashCommandParser.addCommandObject(SlashCommand.fromProps({
@@ -100,79 +101,82 @@ export function initialize_slash_commands() {
     callback: () => {
       return String(get_summary_max_tokens());
     },
-    helpString: 'Return the max tokens allowed for summarization.'
+    helpString: 'Return current max summary generation tokens.'
   }));
 }
 
-// Extension Bootstrap
+// Module Initializer
 if (typeof jQuery !== 'undefined') {
-  jQuery(async function () {
-    guard_get_element_by_id();
-    log(`Loading ${MODULE_NAME_FANCY} extension...`);
-    initialize_settings();
-    init_interfaces();
-    summaryQueue.init_ui();
-
-    // Fetch and inject settings.html
+  jQuery(async () => {
     try {
-      if (typeof $ !== 'undefined') {
-        const index_url = new URL(import.meta.url);
-        const settings_url = new URL('settings.html', index_url).href;
-        const html = await $.get(settings_url);
-        $('#extensions_settings2').append(html);
-      }
-    } catch (e) {
-      error("Could not load settings.html:", e);
-    }
+      const is_browser = typeof window !== 'undefined';
+      if (!is_browser) return;
 
-    initialize_settings_ui();
-    initialize_popout();
-    initialize_message_buttons();
-    initialize_slash_commands();
+      log(`Initializing ${MODULE_NAME_FANCY} extension...`);
+      init_interfaces();
 
-    // Global macros registration
-    if (typeof MacrosParser !== 'undefined' && typeof MacrosParser.registerMacro === 'function') {
-      MacrosParser.registerMacro(short_memory_macro, () => {
-        const ctx = getContext();
-        return ctx?.chat_metadata?.memnext?.short_injection || "";
-      }, 'MemNext Short-Term Memory');
-
-      MacrosParser.registerMacro(long_memory_macro, () => {
-        return get_chat_long_term_memory() || "";
-      }, 'MemNext Long-Term Memory');
-    }
-
-    // Event listeners
-    const ctx = getContext();
-    const eventSource = ctx?.eventSource;
-    const event_types = ctx?.eventTypes || ctx?.event_types;
-    if (eventSource && event_types) {
-      if (typeof eventSource.makeLast === 'function') {
-        eventSource.makeLast(event_types.CHARACTER_MESSAGE_RENDERED, id => on_chat_event('char_message', id));
-      } else if (typeof eventSource.on === 'function') {
-        eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, id => on_chat_event('char_message', id));
-      }
-      if (typeof eventSource.on === 'function') {
-        eventSource.on(event_types.USER_MESSAGE_RENDERED, id => on_chat_event('user_message', id));
-        eventSource.on(event_types.MESSAGE_DELETED, id => on_chat_event('message_deleted', id));
-        eventSource.on(event_types.MESSAGE_EDITED, id => on_chat_event('message_edited', id));
-        eventSource.on(event_types.MESSAGE_SWIPED, id => on_chat_event('message_swiped', id));
-        eventSource.on(event_types.CHAT_CHANGED, () => on_chat_event('chat_changed'));
-        if (event_types.CHAT_LOADED) {
-          eventSource.on(event_types.CHAT_LOADED, () => on_chat_event('chat_changed'));
+      // Load settings HTML into SillyTavern extensions settings container
+      try {
+        if ($('#memnext_settings').length === 0) {
+          const index_url = import.meta.url;
+          const settings_url = new URL('settings.html', index_url).href;
+          const html = await $.get(settings_url);
+          $('#extensions_settings2').append(html);
         }
-        eventSource.on(event_types.MORE_MESSAGES_LOADED, () => {
-          refresh_memory();
-          update_all_message_visuals();
-        });
-        eventSource.on(event_types.GENERATION_STARTED, (type, _params, isDryRun) => on_chat_event('before_message', { type, isDryRun }));
+      } catch (e) {
+        error("Could not load settings.html:", e);
       }
-    }
 
-    refresh_memory();
-    update_all_message_visuals();
-    setTimeout(() => update_all_message_visuals(), 100);
-    setTimeout(() => update_all_message_visuals(), 400);
-    log(`${MODULE_NAME_FANCY} loaded successfully.`);
+      initialize_settings();
+      initialize_settings_ui();
+      initialize_popout();
+      initialize_message_buttons();
+      initialize_slash_commands();
+
+      // Global macros registration
+      if (typeof MacrosParser !== 'undefined' && typeof MacrosParser.registerMacro === 'function') {
+        MacrosParser.registerMacro(short_memory_macro, () => {
+          const ctx = getContext();
+          return ctx?.chat_metadata?.memnext?.short_injection || "";
+        }, 'MemNext Short-Term Memory');
+
+        MacrosParser.registerMacro(long_memory_macro, () => {
+          const ctx = getContext();
+          return ctx?.chat_metadata?.memnext?.long_injection || get_chat_long_term_memory() || "";
+        }, 'MemNext Long-Term Memory');
+      }
+
+      // Event listeners
+      const ctx = getContext();
+      const eventSource = ctx?.eventSource;
+      const event_types = ctx?.eventTypes || ctx?.event_types;
+      if (eventSource && event_types) {
+        if (typeof eventSource.makeLast === 'function') {
+          eventSource.makeLast(event_types.CHARACTER_MESSAGE_RENDERED, id => on_chat_event('char_message', id));
+        } else if (typeof eventSource.on === 'function') {
+          eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, id => on_chat_event('char_message', id));
+        }
+        if (typeof eventSource.on === 'function') {
+          eventSource.on(event_types.USER_MESSAGE_RENDERED, id => on_chat_event('user_message', id));
+          eventSource.on(event_types.MESSAGE_EDITED, id => on_chat_event('message_edited', id));
+          eventSource.on(event_types.MESSAGE_SWIPED, id => on_chat_event('message_swiped', id));
+          eventSource.on(event_types.CHAT_CHANGED, () => on_chat_event('chat_changed'));
+          eventSource.on(event_types.MESSAGE_DELETED, () => on_chat_event('message_deleted'));
+        }
+      }
+
+      // Register Generate Interceptor
+      if (typeof ctx?.generateInterceptor === 'function') {
+        ctx.generateInterceptor(MODULE_NAME, async (chat, contextSize, abort, type) => {
+          if (typeof globalThis.memnext_intercept_messages === 'function') {
+            await globalThis.memnext_intercept_messages(chat, contextSize, abort, type);
+          }
+        });
+      }
+
+      log(`${MODULE_NAME_FANCY} initialized successfully.`);
+    } catch (err) {
+      error("Critical initialization failure:", err);
+    }
   });
 }

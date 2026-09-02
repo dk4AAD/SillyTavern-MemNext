@@ -24,11 +24,13 @@ export const default_settings = {
   include_system_messages: false,
   include_narrator_messages: false,
 
-  // Three editable prompts
+  // Editable prompts & templates
   message_summary_prompt: default_message_summary_prompt,
   short_to_long_prompt: default_short_to_long_prompt,
   long_compaction_prompt: default_long_compaction_prompt,
   summary_prompt_macros: default_summary_macros,
+  long_template: default_long_template,
+  short_template: default_short_template,
   prompt_role: extension_prompt_roles?.SYSTEM ?? 0,
   prefill: "",
   show_prefill: false,
@@ -36,17 +38,14 @@ export const default_settings = {
 
   // Auto-summarization
   auto_summarize: true,
-  summarization_delay: 0,
   summarization_time_delay: 0,
   summarization_time_delay_skip_first: false,
-  auto_summarize_batch_size: 1,
   auto_summarize_message_limit: -1,
   parallel_summaries_count: 1,
   auto_summarize_on_edit: false,
   auto_summarize_on_swipe: true,
   auto_summarize_on_continue: false,
   auto_summarize_progress: true,
-  auto_summarize_on_send: false,
   block_chat: true,
 
   // Accumulative memory budgets (percent of max context)
@@ -59,9 +58,7 @@ export const default_settings = {
   messages_to_keep: 5,
   kept_messages_context_threshold: 30,
 
-  // Prompt templates
-  long_template: default_long_template,
-  short_template: default_short_template,
+  // Injection placement
   injection_position: extension_prompt_types?.IN_PROMPT ?? 0,
   injection_role: extension_prompt_roles?.SYSTEM ?? 0,
 
@@ -272,14 +269,14 @@ export function update_profile_section() {
   }
 }
 
-export function save_profile(profile = null) {
+export function save_profile(profile = null, silent = false) {
   if (!profile) profile = get_settings('profile');
   log("Saving Configuration Profile: " + profile);
   let profiles = get_settings('profiles') || {};
   let settings = copy_settings();
   profiles[profile] = settings;
   set_settings('profiles', profiles);
-  if (typeof toastr !== 'undefined') toastr.success(`Saved profile "${profile}"`);
+  if (!silent && typeof toastr !== 'undefined') toastr.success(`Saved profile "${profile}"`);
   notify_ui_refresh();
 }
 

@@ -187,7 +187,7 @@ export async function fillup() {
     let long_injection = "";
     if (long_summary) {
       let template = get_settings('long_template') || default_long_template;
-      long_injection = template.replace(new RegExp(`\\{\\{${generic_memories_macro}\\}\\}`, 'g'), long_summary);
+      long_injection = template.replace(new RegExp(`\\{\\{\\s*${generic_memories_macro}\\s*\\}\\}`, 'g'), long_summary);
     }
     let short_injection = "";
     if (short_indexes && short_indexes.length > 0) {
@@ -196,7 +196,7 @@ export async function fillup() {
       if (summaries.length > 0) {
         let joined = summaries.join(sep);
         let template = get_settings('short_template') || default_short_template;
-        short_injection = template.replace(new RegExp(`\\{\\{${generic_memories_macro}\\}\\}`, 'g'), joined);
+        short_injection = template.replace(new RegExp(`\\{\\{\\s*${generic_memories_macro}\\s*\\}\\}`, 'g'), joined);
       }
     }
     const position = Number(get_settings('injection_position')) || extension_prompt_types?.IN_PROMPT || 0;

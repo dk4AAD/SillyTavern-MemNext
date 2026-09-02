@@ -20,8 +20,8 @@ test('constants.js: exports expected values', () => {
   assert.equal(css_message_div, 'memnext_display');
   assert.equal(css_short_memory, 'memnext_short_memory');
   assert.equal(css_long_memory, 'memnext_long_memory');
-  assert.equal(long_memory_macro, 'memnext-long-term-memory');
-  assert.equal(short_memory_macro, 'memnext-short-term-memory');
-  assert.equal(generic_memories_macro, 'memnext-memories');
+  assert.equal(long_memory_macro, 'memnext_long');
+  assert.equal(short_memory_macro, 'memnext_short');
+  assert.equal(generic_memories_macro, 'memories');
   assert.equal(typeof IGNORE_SYMBOL, 'symbol');
 });

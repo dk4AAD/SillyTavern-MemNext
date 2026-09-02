@@ -24,6 +24,9 @@ test('state.js: initialize_settings establishes default profile', () => {
   assert.equal(get_settings('auto_summarize'), true);
   assert.equal(get_settings('long_term_context_limit'), 20);
   assert.equal(get_settings('disable_plugin'), false);
+  assert.equal(default_settings.auto_summarize_on_send, undefined);
+  assert.equal(default_settings.summarization_delay, undefined);
+  assert.equal(default_settings.auto_summarize_batch_size, undefined);
 });
 
 test('state.js: get_settings and set_settings persist values', () => {
@@ -57,11 +60,11 @@ test('state.js: character identification and group enable check', () => {
   assert.equal(character_enabled('orig_char.png'), true);
 });
 
-test('state.js: profile management (new_profile, save_profile, load_profile)', () => {
+test('state.js: profile management (new_profile, save_profile, load_profile, silent save)', () => {
   new_profile();
   assert.equal(get_settings('profile'), 'New Profile');
   set_settings('long_term_context_limit', 35);
-  save_profile('New Profile');
+  save_profile('New Profile', true);
   assert.equal(get_settings('long_term_context_limit'), 35);
 
   load_profile('Default');
