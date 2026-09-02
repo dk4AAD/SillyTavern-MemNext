@@ -1,0 +1,17 @@
+{
+  "name": "sillytavern-memnext",
+  "version": "1.0.0",
+  "description": "An advanced accumulative memory extension for SillyTavern.",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --import ./tests/register.js --test tests/",
+    "lint": "npx eslint constants.js utils.js state.js macros.js memory.js summarization.js ui.js index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "eslint": "^8.57.0"
+  }
+}

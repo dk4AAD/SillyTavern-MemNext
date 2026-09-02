@@ -1,0 +1,36 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  init_interfaces,
+  promptInterface1,
+  promptInterface2,
+  promptInterface3,
+  memoryEditInterface,
+  PromptEditInterface,
+  MemoryEditInterface,
+  SummaryPromptEditInterface,
+  update_message_visuals,
+  update_context_budget_displays
+} from '../ui.js';
+
+test('ui.js: init_interfaces instantiates all modal dialogs', () => {
+  init_interfaces();
+  assert.ok(promptInterface1 instanceof SummaryPromptEditInterface);
+  assert.ok(promptInterface2 instanceof PromptEditInterface);
+  assert.ok(promptInterface3 instanceof PromptEditInterface);
+  assert.ok(memoryEditInterface instanceof MemoryEditInterface);
+});
+
+test('ui.js: SummaryPromptEditInterface handles macro name uniqueness', () => {
+  const iface = new SummaryPromptEditInterface();
+  const name1 = iface.get_unique_name('history');
+  assert.equal(name1, 'history_2');
+  assert.ok(iface.list_macros().includes('message'));
+  assert.ok(iface.list_macros().includes('speaker'));
+});
+
+test('ui.js: Visual and budget display helpers execute safely without DOM', () => {
+  update_message_visuals(0);
+  update_context_budget_displays();
+  assert.ok(true);
+});
