@@ -172,10 +172,10 @@
                     </div>
 
                     <div style="margin-bottom: 8px;">
-                        <label title="Trigger batch compaction when free space in Chat Cache drops below this percentage of Chat Cache capacity.">
-                            <span>Compaction Free Space Trigger: &lt; </span>
+                        <label title="Trigger batch compaction when raw chat messages exceed this percentage of Chat Cache capacity.">
+                            <span>Compaction Trigger: &gt; </span>
                             <input id="compaction_threshold_percent" class="text_pole widthUnset inline_setting" type="number" min="1" max="100" />
-                            <span> % (&asymp; <span id="compaction_threshold_tokens_display">0</span> tk)</span>
+                            <span> % of Chat Cache (&asymp; <span id="compaction_threshold_tokens_display">0</span> tk)</span>
                         </label>
                     </div>
 

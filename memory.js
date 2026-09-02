@@ -1,7 +1,7 @@
 /* eslint-disable */
 import { system_message_types, extension_prompt_roles, extension_prompt_types, chat_metadata } from '../../../../script.js';
 import { getContext, saveMetadataDebounced } from '../../../extensions.js';
-import { MODULE_NAME, generic_memories_macro } from './constants.js';
+import { MODULE_NAME, long_memory_macro, short_memory_macro, generic_memories_macro } from './constants.js';
 import { saveChatDebounced, count_tokens, get_chat_context_size, get_long_token_limit, get_short_token_limit, get_chat_cache_capacity } from "./utils.js";
 import { get_settings, chat_enabled, character_enabled, get_character_key } from "./state.js";
 import { summarize_text, summaryQueue } from "./summarization.js";
@@ -128,10 +128,32 @@ export async function fillup() {
 
   let total_context = get_chat_context_size();
   let { cc_max } = get_chat_cache_capacity(total_context, ctx);
-  let reserve_percent = Number(get_settings('compaction_threshold_percent')) || 15;
-  let CC = Math.floor(cc_max * (1 - reserve_percent / 100));
+  let threshold_percent = Number(get_settings('compaction_threshold_percent')) || 85;
+  let CC = Math.floor(cc_max * (threshold_percent / 100));
   if (CC < 100) CC = 100;
 
+  // 1. If entire dialogue fits within CC, NO messages need compaction or exclusion!
+  let total_chat_tokens = 0;
+  for (let i = 0; i < chat.length; i++) {
+    if (chat[i]) total_chat_tokens += count_tokens(chat[i].mes || '');
+  }
+
+  if (total_chat_tokens <= CC) {
+    INJECTION_THRESHOLD_INDEX = null;
+    if (chat_metadata?.memnext) {
+      chat_metadata.memnext.iti = null;
+      chat_metadata.memnext.long_injection = "";
+      chat_metadata.memnext.short_injection = "";
+    }
+    if (typeof ctx.setExtensionPrompt === 'function') {
+      ctx.setExtensionPrompt(`${MODULE_NAME}_long`, "");
+      ctx.setExtensionPrompt(`${MODULE_NAME}_short`, "");
+    }
+    notify_budget_refresh();
+    return;
+  }
+
+  // 2. Chat has exceeded CC. Check if uncompacted messages fit within available context capacity CC (KV cache freeze)
   let meta = chat_metadata?.memnext || {};
   let raw_start = (meta.iti !== undefined && meta.iti !== null && meta.iti >= 0) ? meta.iti : -1;
   let raw_sum = 0;
@@ -139,43 +161,28 @@ export async function fillup() {
     if (chat[i]) raw_sum += count_tokens(chat[i].mes || '');
   }
 
-  // Check if uncompacted messages fit within available context capacity CC
-  if (raw_sum <= CC) {
-    if (meta.iti !== undefined && meta.iti !== null && meta.iti >= 0) {
-      let messages_to_keep = Number(get_settings('messages_to_keep')) || 5;
-      let kept_sum = 0;
-      let start_kept = Math.max(0, chat.length - messages_to_keep);
-      for (let i = chat.length - 1; i >= start_kept; i--) {
-        if (chat[i]) kept_sum += count_tokens(chat[i].mes || '');
-      }
-      let threshold_pct = Number(get_settings('kept_messages_context_threshold')) || 30;
-      if (kept_sum <= (threshold_pct / 100) * CC) {
-        INJECTION_THRESHOLD_INDEX = meta.iti;
-        const position = Number(get_settings('injection_position')) || extension_prompt_types?.IN_PROMPT || 0;
-        const role = Number(get_settings('injection_role')) || extension_prompt_roles?.SYSTEM || 0;
-        if (typeof ctx.setExtensionPrompt === 'function') {
-          ctx.setExtensionPrompt(`${MODULE_NAME}_long`, meta.long_injection || "", position, 0, false, role);
-          ctx.setExtensionPrompt(`${MODULE_NAME}_short`, meta.short_injection || "", position, 0, false, role);
-        }
-        notify_budget_refresh();
-        return; // KV CACHE FROZEN!
-      }
-    } else {
-      // Entire dialogue is under context capacity! No messages need compaction or exclusion.
-      INJECTION_THRESHOLD_INDEX = null;
-      if (chat_metadata?.memnext) {
-        chat_metadata.memnext.iti = null;
-      }
+  if (raw_start >= 0 && raw_sum <= CC) {
+    let messages_to_keep = Number(get_settings('messages_to_keep')) || 5;
+    let kept_sum = 0;
+    let start_kept = Math.max(0, chat.length - messages_to_keep);
+    for (let i = chat.length - 1; i >= start_kept; i--) {
+      if (chat[i]) kept_sum += count_tokens(chat[i].mes || '');
+    }
+    let threshold_pct = Number(get_settings('kept_messages_context_threshold')) || 30;
+    if (kept_sum <= (threshold_pct / 100) * CC) {
+      INJECTION_THRESHOLD_INDEX = meta.iti;
+      const position = Number(get_settings('injection_position')) || extension_prompt_types?.IN_PROMPT || 0;
+      const role = Number(get_settings('injection_role')) || extension_prompt_roles?.SYSTEM || 0;
       if (typeof ctx.setExtensionPrompt === 'function') {
-        ctx.setExtensionPrompt(`${MODULE_NAME}_long`, "");
-        ctx.setExtensionPrompt(`${MODULE_NAME}_short`, "");
+        ctx.setExtensionPrompt(`${MODULE_NAME}_long`, meta.long_injection || "", position, 0, false, role);
+        ctx.setExtensionPrompt(`${MODULE_NAME}_short`, meta.short_injection || "", position, 0, false, role);
       }
       notify_budget_refresh();
-      return;
+      return; // KV CACHE FROZEN!
     }
   }
 
-  // Raw chat has exceeded capacity CC; calculate new compaction and threshold
+  // 3. Raw chat has exceeded capacity CC; calculate new compaction and threshold
   let result = await try_first_to_keep(CC);
   if (!result) {
     result = await try_for_cc(CC);
@@ -187,7 +194,7 @@ export async function fillup() {
     let long_injection = "";
     if (long_summary) {
       let template = get_settings('long_template') || default_long_template;
-      long_injection = template.replace(new RegExp(`\\{\\{\\s*${generic_memories_macro}\\s*\\}\\}`, 'g'), long_summary);
+      long_injection = template.replace(new RegExp(`\\{\\{\\s*(?:${long_memory_macro}|${generic_memories_macro})\\s*\\}\\}`, 'g'), long_summary);
     }
     let short_injection = "";
     if (short_indexes && short_indexes.length > 0) {
@@ -196,7 +203,7 @@ export async function fillup() {
       if (summaries.length > 0) {
         let joined = summaries.join(sep);
         let template = get_settings('short_template') || default_short_template;
-        short_injection = template.replace(new RegExp(`\\{\\{\\s*${generic_memories_macro}\\s*\\}\\}`, 'g'), joined);
+        short_injection = template.replace(new RegExp(`\\{\\{\\s*(?:${short_memory_macro}|${generic_memories_macro})\\s*\\}\\}`, 'g'), joined);
       }
     }
     const position = Number(get_settings('injection_position')) || extension_prompt_types?.IN_PROMPT || 0;

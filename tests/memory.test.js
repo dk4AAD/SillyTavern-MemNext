@@ -69,6 +69,24 @@ test('memory.js: ITI remains null when chat is within context limits and not reg
   assert.equal(chat_metadata.memnext?.iti ?? null, null);
 });
 
+test('memory.js: ITI resets to null if entire chat fits within CC even if iti was previously set', async () => {
+  mockChat.length = 0;
+  for (let i = 0; i < 8; i++) {
+    mockChat.push({
+      mes: `Short message ${i}.`,
+      is_user: i % 2 === 0,
+      extra: { memnext: { memory: `Summary ${i}` } }
+    });
+  }
+  // Simulate stale ITI (e.g. from an old session or huge prompt)
+  set_injection_threshold_index(5);
+  chat_metadata.memnext = { iti: 5 };
+
+  await refresh_memory();
+  assert.equal(get_injection_threshold_index(), null, 'ITI should reset to null when entire chat fits in CC');
+  assert.equal(chat_metadata.memnext?.iti ?? null, null);
+});
+
 test('memory.js: try_first_to_keep - limit exceeded vs not exceeded', async () => {
   mockChat.length = 0;
   // Case A: sum of last 5 messages is small (limit not exceeded)

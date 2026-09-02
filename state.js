@@ -51,7 +51,7 @@ export const default_settings = {
   // Accumulative memory budgets (percent of max context)
   long_term_context_limit: 20,
   short_term_context_limit: 15,
-  compaction_threshold_percent: 15,
+  compaction_threshold_percent: 85,
 
   // Truncation & Injection
   summary_injection_separator: "\n* ",

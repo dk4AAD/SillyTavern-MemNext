@@ -68,8 +68,8 @@ Your response must ONLY contain the condensed narrative.
 {{long_memory}}
 `;
 
-export const default_long_template = `[Past Events Summary]:\n{{${generic_memories_macro}}}\n`;
-export const default_short_template = `[Recent Events Summary]:\n{{${generic_memories_macro}}}\n`;
+export const default_long_template = `[Past Events Summary]:\n{{${long_memory_macro}}}\n`;
+export const default_short_template = `[Recent Events Summary]:\n{{${short_memory_macro}}}\n`;
 
 export const default_macro_settings = {
   name: "New Macro",

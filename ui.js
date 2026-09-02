@@ -1296,7 +1296,7 @@ export function init_interfaces() {
     description: 'Template used to frame the consolidated long-term memory narrative before injection into the prompt.',
     default_prompt: default_long_template,
     macros: [
-      { name: 'memories', desc: 'The consolidated long-term memory narrative.' }
+      { name: 'memnext_long', desc: 'The consolidated long-term memory narrative.' }
     ]
   });
   promptInterfaceShortTemplate = new PromptEditInterface({
@@ -1305,7 +1305,7 @@ export function init_interfaces() {
     description: 'Template used to frame the rolling short-term summaries before injection into the prompt.',
     default_prompt: default_short_template,
     macros: [
-      { name: 'memories', desc: 'The active short-term rolling summaries joined by the separator.' }
+      { name: 'memnext_short', desc: 'The active short-term rolling summaries joined by the separator.' }
     ]
   });
   memoryEditInterface = new MemoryEditInterface();
