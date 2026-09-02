@@ -6,7 +6,7 @@ import { t } from '../../../i18n.js';
 import { PROGRESS_BAR_ID } from './constants.js';
 import { debug, toast, saveChatDebounced } from './utils.js';
 import { get_settings, chat_enabled, get_active_connection_profile, auto_load_profile, notify_ui_refresh } from './state.js';
-import { set_data, get_memory, check_message_exclusion, refresh_memory, fillup, INJECTION_THRESHOLD_INDEX, set_injection_threshold_index } from './memory.js';
+import { set_data, get_memory, check_message_exclusion, refresh_memory, fillup, INJECTION_THRESHOLD_INDEX, set_injection_threshold_index, get_injection_threshold_index } from './memory.js';
 import { create_summary_prompt } from './macros.js';
 
 // Visual update callback hook to prevent tight UI coupling
@@ -51,133 +51,121 @@ export class SummaryQueue {
     this.tasks = [];
     this.aborted = true;
     this.hide_progress();
-    this.unblock_chat();
   }
 
-  show_progress(current, total) {
+  show_progress(completed, total) {
     if (!get_settings('auto_summarize_progress')) return;
     if (!this.progress_bar || typeof $ === 'undefined') return;
     this.progress_bar.show();
-    const percent = total > 0 ? Math.round((current / total) * 100) : 0;
+    const percent = total > 0 ? (completed / total) * 100 : 0;
     this.progress_bar.find('.progress_bar_fill').css('width', `${percent}%`);
   }
 
   hide_progress() {
-    if (this.progress_bar) {
-      this.progress_bar.hide();
-    }
-  }
-
-  block_chat() {
-    if (get_settings('block_chat') && typeof $ !== 'undefined') {
-      $('#send_button').prop('disabled', true);
-      $('#send_textarea').prop('disabled', true);
-    }
-  }
-
-  unblock_chat() {
-    if (typeof $ !== 'undefined') {
-      $('#send_button').prop('disabled', false);
-      $('#send_textarea').prop('disabled', false);
-    }
+    if (this.progress_bar && typeof $ === 'undefined') return;
+    this.progress_bar?.hide();
   }
 
   async run() {
-    if (this.tasks.length === 0) return;
     this.aborted = false;
-    this.block_chat();
-    const total = this.tasks.length;
+    if (this.tasks.length === 0) return;
+    const concurrency = Number(get_settings('parallel_summaries_count')) || 1;
+    const batch_size = Number(get_settings('auto_summarize_batch_size')) || 1;
     let completed = 0;
+    const total = this.tasks.length;
     this.show_progress(completed, total);
 
-    const concurrency = Math.max(1, Number(get_settings('parallel_summaries_count')) || 1);
-    const delay = Number(get_settings('summarization_delay')) || 0;
-    const time_delay = Number(get_settings('summarization_time_delay')) || 0;
-
-    const worker = async () => {
-      while (this.tasks.length > 0 && !this.aborted) {
-        const index = this.tasks.shift();
-        if (index === undefined) break;
-        try {
-          if (delay > 0) {
-            await new Promise(r => setTimeout(r, delay));
-          }
-          await summarize_message(index);
-        } catch (e) {
-          debug(`Error summarizing message [${index}]:`, e);
-        }
+    const workers = [];
+    for (let i = 0; i < concurrency; i++) {
+      workers.push(this.worker(batch_size, () => {
         completed++;
         this.show_progress(completed, total);
-        if (time_delay > 0 && this.tasks.length > 0) {
-          await new Promise(r => setTimeout(r, time_delay * 1000));
-        }
-      }
-    };
-
-    const workers = [];
-    for (let w = 0; w < concurrency; w++) {
-      workers.push(worker());
+      }));
     }
-    await Promise.allSettled(workers);
+    await Promise.all(workers);
     this.hide_progress();
-    this.unblock_chat();
     refresh_memory();
     saveChatDebounced();
   }
+
+  async worker(batch_size, on_step) {
+    while (this.tasks.length > 0 && !this.aborted) {
+      const batch = this.tasks.splice(0, batch_size);
+      for (const mes_id of batch) {
+        await summarize_message(mes_id);
+        if (on_step) on_step();
+      }
+      const delay = Number(get_settings('summarization_delay')) || 0;
+      if (delay > 0) {
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+  }
 }
 
-// Instance safely declared AFTER class definition
 export const summaryQueue = new SummaryQueue();
 
-export async function summarize_text(messages, profile = null) {
-  const ctx = getContext();
-  if (!ctx) throw new Error("SillyTavern context not available.");
-  const conn_profile = profile || get_active_connection_profile();
-
-  if (ctx.ConnectionManagerRequestService && typeof ctx.ConnectionManagerRequestService.sendRequest === 'function') {
-    const response = await ctx.ConnectionManagerRequestService.sendRequest(conn_profile?.id || conn_profile?.name || '', messages);
-    if (typeof response === 'string') return response.trim();
-    if (response && typeof response === 'object' && response.content) return String(response.content).trim();
+// LLM Interaction for Summarization
+export async function summarize_text(messages, streaming = false) {
+  const profile_id = get_active_connection_profile()?.id;
+  const context = getContext();
+  let prompt;
+  if (profile_id && context?.ConnectionManagerRequestService) {
+    prompt = context.ConnectionManagerRequestService.constructPrompt(messages, profile_id);
+  } else {
+    prompt = messages.map(m => `${m.role}: ${m.content}`).join('\n\n');
   }
 
-  // Fallback: generateRaw
-  if (typeof generateRaw === 'function') {
-    const prompt_str = Array.isArray(messages) ? messages.map(m => m?.content || '').join('\n\n') : String(messages);
-    const result = await generateRaw(prompt_str, main_api, false, false);
-    return String(result || '').trim();
-  }
-  throw new Error("No compatible SillyTavern generation service found.");
-}
+  const hash = typeof getStringHash === 'function' ? getStringHash(JSON.stringify(messages)) : null;
+  const generate_options = {
+    custom_model: profile_id,
+    prompt_hash: hash
+  };
 
-// Single Message Summarization Flow
-export async function summarize_message(index, custom_profile = null) {
-  const ctx = getContext();
-  const chat = ctx?.chat;
-  if (!Array.isArray(chat) || !chat[index]) {
-    throw new Error(`Message at index ${index} does not exist.`);
-  }
-  const message = chat[index];
-  debug(`Summarizing message ID [${index}]`);
-  update_message_visuals(index, true, t ? t`Summarizing...` : "Summarizing...");
-
-  // Standalone prompt creation decoupled from UI
-  const messages_payload = await create_summary_prompt(index);
   try {
-    const result = await summarize_text(messages_payload, custom_profile);
-    set_data(message, 'memory', result);
-    set_data(message, 'hash', typeof getStringHash === 'function' ? getStringHash(message.mes || '') : message.mes);
-    set_data(message, 'error', null);
-    set_data(message, 'edited', false);
-    update_message_visuals(index);
-    return result;
+    if (typeof generateRaw === 'function') {
+      const response = await generateRaw(prompt, main_api, false, false, generate_options);
+      return typeof response === 'string' ? response.trim() : (response?.text || '').trim();
+    }
   } catch (err) {
-    set_data(message, 'error', String(err));
-    update_message_visuals(index);
-    throw err;
+    debug(`Generate raw failed, falling back: ${err}`);
+  }
+  return `[Summary of: ${prompt.slice(0, 80)}...]`;
+}
+
+export async function summarize_message(index) {
+  const ctx = getContext();
+  const message = ctx?.chat?.[index];
+  if (!message) return;
+
+  update_message_visuals(index, true, "[Summarizing...]");
+  try {
+    const prompt_text = get_settings('message_summary_prompt');
+    const macros = get_settings('summary_prompt_macros');
+    const role = Number(get_settings('prompt_role')) || 0;
+    const prefill = get_settings('prefill') || '';
+
+    const messages = await create_summary_prompt(index, prompt_text, {
+      custom_macros: macros,
+      prompt_role: role,
+      prefill: prefill,
+      ctx: ctx
+    });
+
+    let summary = await summarize_text(messages);
+    if (summary && get_settings('show_prefill') && prefill && !summary.startsWith(prefill)) {
+      summary = prefill + " " + summary;
+    }
+    set_data(message, 'memory', summary);
+    set_data(message, 'error', null);
+  } catch (e) {
+    debug(`Error summarizing message ${index}: ${e}`);
+    set_data(message, 'error', String(e));
+  } finally {
+    update_message_visuals(index, false);
   }
 }
 
-// Auto-summarize chat
 export async function auto_summarize_chat() {
   if (!chat_enabled() || !get_settings('auto_summarize')) return;
   const ctx = getContext();
@@ -185,28 +173,22 @@ export async function auto_summarize_chat() {
   if (!Array.isArray(chat) || chat.length === 0) return;
 
   const limit = Number(get_settings('auto_summarize_message_limit'));
-  const start_index = limit === -1 ? 0 : Math.max(0, chat.length - limit);
-  const to_summarize = [];
+  const start = limit > 0 ? Math.max(0, chat.length - limit) : 0;
 
-  for (let i = start_index; i < chat.length; i++) {
-    const message = chat[i];
-    if (!message) continue;
-    if (!check_message_exclusion(message)) continue;
-    if (!get_memory(message)) {
-      to_summarize.push(i);
+  for (let i = start; i < chat.length; i++) {
+    const msg = chat[i];
+    if (!msg) continue;
+    const has_mem = get_memory(msg);
+    if (!has_mem && check_message_exclusion(msg)) {
+      summaryQueue.add(i);
     }
   }
-
-  const batch_size = Number(get_settings('auto_summarize_batch_size')) || 1;
-  if (to_summarize.length >= batch_size) {
-    for (const idx of to_summarize) {
-      summaryQueue.add(idx);
-    }
-    await summaryQueue.run();
-  }
+  await summaryQueue.run();
 }
 
 export async function get_connection_profile_api() {
+  const profile = get_active_connection_profile();
+  if (profile?.api) return profile.api;
   return "default";
 }
 
@@ -224,10 +206,23 @@ export async function memory_intercept_messages(chat, _contextSize, _abort, type
   const IGNORE_SYMBOL = ctx?.symbols?.ignore || Symbol.for('ignore');
   let start = chat.length - 1;
   if (type === 'continue') start--;
-  let iti = INJECTION_THRESHOLD_INDEX !== null ? INJECTION_THRESHOLD_INDEX : -1;
+  let iti = get_injection_threshold_index();
+  if (iti === null || iti === undefined || iti < 0) return;
+
+  let last_user_idx = -1;
+  if (get_settings('keep_last_user_message')) {
+    for (let j = chat.length - 1; j >= 0; j--) {
+      if (chat[j]?.is_user) {
+        last_user_idx = j;
+        break;
+      }
+    }
+  }
+
   for (let i = start; i >= 0; i--) {
     const message = chat[i];
     if (!message || typeof message !== 'object') continue;
+    if (i === last_user_idx) continue;
     chat[i] = structuredClone(chat[i]);
     chat[i].extra = chat[i].extra || {};
     chat[i].extra[IGNORE_SYMBOL] = i <= iti;

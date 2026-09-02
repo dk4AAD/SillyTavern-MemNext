@@ -68,7 +68,8 @@ import {
   set_chat_long_term_memory,
   check_message_exclusion,
   refresh_memory,
-  set_budget_refresh_callback
+  set_budget_refresh_callback,
+  get_injection_threshold_index
 } from './memory.js';
 import {
   summarize_message,
@@ -96,6 +97,35 @@ function get_message_div(index) {
   if (typeof $ === 'undefined') return null;
   const div = $(`div[mesid="${index}"]`);
   return div.length > 0 ? div : null;
+}
+
+export function is_message_excluded_from_context(i) {
+  if (!chat_enabled()) return false;
+  if (!get_settings('exclude_messages_after_threshold')) return false;
+
+  const ctx = getContext();
+  const chat = ctx?.chat;
+  if (!Array.isArray(chat) || !chat[i]) return false;
+
+  const iti = get_injection_threshold_index();
+  if (iti === null || iti === undefined || iti < 0) {
+    // No threshold calculated yet - Tavern handles all messages naturally
+    return false;
+  }
+
+  // Keep last user message in context if configured
+  if (get_settings('keep_last_user_message')) {
+    let last_user_idx = -1;
+    for (let j = chat.length - 1; j >= 0; j--) {
+      if (chat[j]?.is_user) {
+        last_user_idx = j;
+        break;
+      }
+    }
+    if (i === last_user_idx) return false;
+  }
+
+  return i <= iti;
 }
 
 export function open_edit_memory_input(index) {
@@ -154,7 +184,14 @@ export function update_message_visuals(i, in_progress = false, custom_text = nul
   const div = get_message_div(i);
   if (!div) return;
   div.find(`div.${summary_div_class}`).remove();
-  div.find(`.mes_text`).removeClass(css_removed_message);
+
+  // Control message exclusion visuals
+  const is_excluded = is_message_excluded_from_context(i);
+  if (is_excluded) {
+    div.find(`.mes_text`).addClass(css_removed_message);
+  } else {
+    div.find(`.mes_text`).removeClass(css_removed_message);
+  }
 
   if (!get_settings('display_memories') || !chat_enabled()) return;
   const ctx = getContext();
@@ -162,13 +199,11 @@ export function update_message_visuals(i, in_progress = false, custom_text = nul
   if (!message) return;
 
   const memory_text = custom_text || get_memory(message);
-  const include = get_data(message, 'include');
-  const lagging = get_data(message, 'lagging');
-
-  if (get_settings('exclude_messages_after_threshold') && !lagging) {
-    div.find(`.mes_text`).addClass(css_removed_message);
-  }
   if (!memory_text) return;
+
+  const include = get_data(message, 'include');
+  const iti = get_injection_threshold_index();
+  const lagging = iti === null || iti === undefined ? true : (i > iti);
 
   // Default to short memory (fancy green styling)
   let style_class = css_short_memory;

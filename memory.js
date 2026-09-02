@@ -81,6 +81,14 @@ export function set_injection_threshold_index(val) {
   INJECTION_THRESHOLD_INDEX = val;
 }
 
+export function get_injection_threshold_index() {
+  const meta = chat_metadata?.memnext;
+  if (meta && meta.iti !== undefined && meta.iti !== null) {
+    return meta.iti;
+  }
+  return INJECTION_THRESHOLD_INDEX;
+}
+
 export let is_filling_up = false;
 export async function refresh_memory() {
   if (is_filling_up) return;

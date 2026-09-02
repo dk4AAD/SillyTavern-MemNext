@@ -12,8 +12,11 @@ import {
   update_message_visuals,
   update_context_budget_displays,
   update_save_icon_highlight,
-  open_edit_memory_input
+  open_edit_memory_input,
+  is_message_excluded_from_context
 } from '../ui.js';
+import { set_injection_threshold_index } from '../memory.js';
+import { chat_metadata, mockChat } from './mocks/sillytavern.js';
 
 test('ui.js: init_interfaces instantiates all modal dialogs', () => {
   init_interfaces();
@@ -48,6 +51,34 @@ test('ui.js: SummaryPromptEditInterface allows macro deletion', () => {
   assert.ok(iface.get_macro('custom_test'));
   delete iface.macros['custom_test'];
   assert.equal(iface.get_macro('custom_test'), undefined);
+});
+
+test('ui.js: is_message_excluded_from_context only excludes when ITI is active', () => {
+  mockChat.length = 0;
+  mockChat.push(
+    { mes: 'First message', is_user: false },
+    { mes: 'Second message', is_user: false },
+    { mes: 'Third message', is_user: true }
+  );
+
+  // Initially ITI is null: no messages should be excluded, Tavern handles context
+  set_injection_threshold_index(null);
+  if (chat_metadata.memnext) chat_metadata.memnext.iti = null;
+  assert.equal(is_message_excluded_from_context(0), false);
+  assert.equal(is_message_excluded_from_context(1), false);
+  assert.equal(is_message_excluded_from_context(2), false);
+
+  // When ITI is set to 0, message 0 is excluded
+  set_injection_threshold_index(0);
+  assert.equal(is_message_excluded_from_context(0), true);
+  // Message 1 is above ITI, so it is NOT excluded
+  assert.equal(is_message_excluded_from_context(1), false);
+  // Message 2 is last user message and above ITI, so NOT excluded
+  assert.equal(is_message_excluded_from_context(2), false);
+
+  // Reset ITI back to null
+  set_injection_threshold_index(null);
+  assert.equal(is_message_excluded_from_context(0), false);
 });
 
 test('ui.js: Visual, save highlight, and budget display helpers execute safely without DOM', () => {
