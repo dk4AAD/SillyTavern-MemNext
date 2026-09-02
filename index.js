@@ -2667,7 +2667,7 @@ class SummaryPromptEditInterface {
                 let dynamic_macro = {
                     name: name,
                     type: "preset",
-                    instruct_template: true,
+                    instruct_template: false,
                     start: 1,
                     end: num,
                     bot_messages: true,
@@ -2746,7 +2746,12 @@ class SummaryPromptEditInterface {
                 if (macro.instruct_template) {
                     history.push({role: role, name: m.name, content: text})
                 } else {
-                    history.push(text)
+                    let name = m.name || (m.is_user ? this.ctx.name1 : this.ctx.name2)
+                    if (name) {
+                        history.push(`${name}: ${text}`)
+                    } else {
+                        history.push(text)
+                    }
                 }
             }
 
