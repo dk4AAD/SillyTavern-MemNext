@@ -632,20 +632,7 @@ export class PromptEditInterface {
     $content.closest('dialog').css('min-width', '70%');
     const $textarea = $content.find('#prompt_text');
     const $restore = $content.find('#restore_default');
-    let current_val = get_settings(this.setting_key) || this.default_prompt;
-    if (this.setting_key === 'long_template' && typeof current_val === 'string') {
-      current_val = current_val
-        .replace(/\{\{\s*memnext-memories\s*\}\}/g, '{{memnext_long}}')
-        .replace(/\{\{\s*memories\s*\}\}/g, '{{memnext_long}}');
-      set_settings(this.setting_key, current_val);
-    }
-    if (this.setting_key === 'short_template' && typeof current_val === 'string') {
-      current_val = current_val
-        .replace(/\{\{\s*memnext-memories\s*\}\}/g, '{{memnext_short}}')
-        .replace(/\{\{\s*memories\s*\}\}/g, '{{memnext_short}}');
-      set_settings(this.setting_key, current_val);
-    }
-    $textarea.val(current_val);
+    $textarea.val(get_settings(this.setting_key) || this.default_prompt);
     $restore.on('click', () => {
       $textarea.val(this.default_prompt);
     });
