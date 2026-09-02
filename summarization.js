@@ -87,6 +87,7 @@ export class SummaryQueue {
   total_tasks = 0;
   completed_tasks = 0;
   queue_running = false;
+  last_summary_request_time = 0;
 
   constructor() {}
 
@@ -196,7 +197,25 @@ export class SummaryQueue {
       const batch = this.tasks.splice(0, batch_size);
       for (const mes_id of batch) {
         if (this.aborted) break;
+
+        // Rate limiting: summarization_time_delay (in seconds)
+        const time_delay_s = Number(get_settings('summarization_time_delay')) || 0;
+        if (time_delay_s > 0 && !this.aborted) {
+          const skip_first = Boolean(get_settings('summarization_time_delay_skip_first')) && this.completed_tasks === 0;
+          if (!skip_first && this.last_summary_request_time > 0) {
+            const elapsed = Date.now() - this.last_summary_request_time;
+            const required_delay = time_delay_s * 1000;
+            if (elapsed < required_delay) {
+              const wait_ms = required_delay - elapsed;
+              this.show_progress(this.completed_tasks, this.total_tasks, `Waiting ${Math.ceil(wait_ms / 1000)}s...`);
+              await new Promise(r => setTimeout(r, wait_ms));
+            }
+          }
+        }
+
+        if (this.aborted) break;
         await summarize_message(mes_id);
+        this.last_summary_request_time = Date.now();
         this.step_progress("Summarizing...");
       }
       const delay = Number(get_settings('summarization_delay')) || 0;
@@ -405,7 +424,6 @@ export function get_summary_max_tokens() {
 // Generate Interceptor (Truncate Raw Chat Beyond Threshold)
 export async function memory_intercept_messages(chat, _contextSize, _abort, type) {
   if (!chat_enabled()) return;
-  if (!get_settings('exclude_messages_after_threshold')) return;
   await fillup();
   if (!Array.isArray(chat) || chat.length === 0) return;
   const ctx = getContext();
@@ -415,20 +433,9 @@ export async function memory_intercept_messages(chat, _contextSize, _abort, type
   let iti = get_injection_threshold_index();
   if (iti === null || iti === undefined || iti < 0) return;
 
-  let last_user_idx = -1;
-  if (get_settings('keep_last_user_message')) {
-    for (let j = chat.length - 1; j >= 0; j--) {
-      if (chat[j]?.is_user) {
-        last_user_idx = j;
-        break;
-      }
-    }
-  }
-
   for (let i = start; i >= 0; i--) {
     const message = chat[i];
     if (!message || typeof message !== 'object') continue;
-    if (i === last_user_idx) continue;
     chat[i] = structuredClone(chat[i]);
     chat[i].extra = chat[i].extra || {};
     chat[i].extra[IGNORE_SYMBOL] = i <= iti;
@@ -438,6 +445,8 @@ export async function memory_intercept_messages(chat, _contextSize, _abort, type
 if (typeof globalThis !== 'undefined') {
   globalThis.memnext_intercept_messages = memory_intercept_messages;
 }
+
+let last_char_message_index = null;
 
 // Chat event router
 export async function on_chat_event(event, data = null) {
@@ -454,11 +463,22 @@ export async function on_chat_event(event, data = null) {
       if (data !== null && data !== undefined) {
         update_message_visuals(Number(data));
       }
-      // Defer auto-summarization to the next tick so SillyTavern finishes rendering
-      // and the browser immediately paints/prints the message in chat.
-      setTimeout(async () => {
-        await auto_summarize_chat();
-      }, 0);
+      // Check if continuing the same character message
+      if (data !== null && data !== undefined && Number(data) === last_char_message_index) {
+        if (get_settings('auto_summarize_on_continue')) {
+          summaryQueue.add(Number(data));
+          setTimeout(async () => {
+            await summaryQueue.run();
+          }, 0);
+        }
+      } else {
+        last_char_message_index = data !== null && data !== undefined ? Number(data) : null;
+        // Defer auto-summarization to the next tick so SillyTavern finishes rendering
+        // and the browser immediately paints/prints the message in chat.
+        setTimeout(async () => {
+          await auto_summarize_chat();
+        }, 0);
+      }
       break;
     case 'message_edited':
       if (data !== null && data !== undefined) {
@@ -484,6 +504,7 @@ export async function on_chat_event(event, data = null) {
       refresh_memory();
       break;
     case 'chat_changed':
+      last_char_message_index = null;
       auto_load_profile();
       set_injection_threshold_index(null);
       if (chat_metadata?.memnext) chat_metadata.memnext.iti = null;

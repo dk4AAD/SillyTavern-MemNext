@@ -27,6 +27,7 @@ import {
   get_chat_context_size,
   get_long_token_limit,
   get_short_token_limit,
+  get_chat_cache_capacity,
   escape_string,
   unescape_string,
   clean_string_for_html,
@@ -109,7 +110,6 @@ function get_message_div(index) {
 
 export function is_message_excluded_from_context(i) {
   if (!chat_enabled()) return false;
-  if (!get_settings('exclude_messages_after_threshold')) return false;
 
   const ctx = getContext();
   const chat = ctx?.chat;
@@ -119,18 +119,6 @@ export function is_message_excluded_from_context(i) {
   if (iti === null || iti === undefined || iti < 0) {
     // No threshold calculated yet - Tavern handles all messages naturally
     return false;
-  }
-
-  // Keep last user message in context if configured
-  if (get_settings('keep_last_user_message')) {
-    let last_user_idx = -1;
-    for (let j = chat.length - 1; j >= 0; j--) {
-      if (chat[j]?.is_user) {
-        last_user_idx = j;
-        break;
-      }
-    }
-    if (i === last_user_idx) return false;
   }
 
   return i <= iti;
@@ -254,8 +242,9 @@ export function update_context_budget_displays() {
   const context_size = get_chat_context_size();
   const long_tokens = get_long_token_limit();
   const short_tokens = get_short_token_limit();
+  const { cc_max } = get_chat_cache_capacity(context_size);
   const threshold_percent = Number(get_settings('compaction_threshold_percent')) || 15;
-  const threshold_tokens = Math.floor(context_size * (threshold_percent / 100));
+  const threshold_tokens = Math.floor(cc_max * (threshold_percent / 100));
 
   $(`.${settings_content_class} #long_term_context_limit_display`).text(long_tokens);
   $(`.${settings_content_class} #short_term_context_limit_display`).text(short_tokens);
@@ -310,6 +299,7 @@ export function initialize_settings_ui() {
     }
   };
 
+  bind_input('disable_plugin', 'disable_plugin', 'boolean');
   bind_input('auto_summarize', 'auto_summarize', 'boolean');
   bind_input('auto_summarize_on_edit', 'auto_summarize_on_edit', 'boolean');
   bind_input('auto_summarize_on_swipe', 'auto_summarize_on_swipe', 'boolean');
@@ -317,9 +307,6 @@ export function initialize_settings_ui() {
   bind_input('block_chat', 'block_chat', 'boolean');
   bind_input('auto_summarize_progress', 'auto_summarize_progress', 'boolean');
   bind_input('auto_summarize_on_send', 'auto_summarize_on_send', 'boolean');
-  bind_input('auto_summarize_block_generation', 'auto_summarize_block_generation', 'boolean');
-  bind_input('exclude_messages_after_threshold', 'exclude_messages_after_threshold', 'boolean');
-  bind_input('keep_last_user_message', 'keep_last_user_message', 'boolean');
   bind_input('include_user_messages', 'include_user_messages', 'boolean');
   bind_input('include_system_messages', 'include_system_messages', 'boolean');
   bind_input('include_narrator_messages', 'include_narrator_messages', 'boolean');
@@ -339,11 +326,7 @@ export function initialize_settings_ui() {
   bind_input('messages_to_keep', 'messages_to_keep', 'number');
   bind_input('kept_messages_context_threshold', 'kept_messages_context_threshold', 'number');
   bind_input('message_length_threshold', 'message_length_threshold', 'number');
-  bind_input('injection_threshold_update_trigger_messages', 'injection_threshold_update_trigger_messages', 'number');
-  bind_input('injection_threshold_update_trigger_summaries', 'injection_threshold_update_trigger_summaries', 'number');
-  bind_input('injection_threshold_update_trigger_context', 'injection_threshold_update_trigger_context', 'number');
   bind_input('summary_injection_separator', 'summary_injection_separator', 'text');
-  bind_input('summary_injection_threshold_type', 'summary_injection_threshold_type', 'text');
   bind_input('injection_position', 'injection_position', 'number');
   bind_input('injection_role', 'injection_role', 'number');
 
@@ -420,6 +403,7 @@ export function initialize_settings_ui() {
 
   update_connection_profile_dropdown();
   refresh_settings();
+  initialize_chat_menu_buttons();
 }
 
 export function update_connection_profile_dropdown() {
@@ -453,6 +437,31 @@ export function refresh_settings() {
   $(`.${settings_content_class} #toggle_chat_memory`).toggleClass('button_highlight', enabled);
   update_context_budget_displays();
   update_save_icon_highlight();
+}
+
+export function initialize_chat_menu_buttons() {
+  if (typeof $ === 'undefined') return;
+  const $extensions_menu = $('#extensionsMenu');
+  if (!$extensions_menu.length) return;
+  if ($extensions_menu.find('#memnext_toggle_display_btn').length > 0) return;
+
+  const $btn = $(`
+    <div id="memnext_toggle_display_btn" class="list-group-item flex-container flexGap5 interactable" title="Toggle MemNext summaries display in chat" tabindex="0">
+      <i class="fa-solid fa-eye"></i>
+      <span>Toggle Memories Display</span>
+    </div>
+  `);
+
+  $btn.on('click', () => {
+    const current = get_settings('display_memories');
+    set_settings('display_memories', !current);
+    save_profile(get_settings('profile'));
+    $(`.${settings_content_class} #display_memories`).prop('checked', !current);
+    update_all_message_visuals();
+    toast(`Memory display ${!current ? 'enabled' : 'disabled'}.`, "info");
+  });
+
+  $extensions_menu.append($btn);
 }
 
 // In-chat Message Buttons

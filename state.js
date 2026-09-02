@@ -1,7 +1,6 @@
 /* eslint-disable */
-import { saveSettingsDebounced, extension_prompt_roles, extension_prompt_types, chat_metadata } from '../../../../script.js';
-import { getContext, extension_settings, saveMetadataDebounced } from '../../../extensions.js';
-import { download, parseJsonFile } from '../../../utils.js';
+import { extension_prompt_roles, extension_prompt_types, chat_metadata } from '../../../../script.js';
+import { extension_settings, getContext, saveSettingsDebounced, saveMetadataDebounced } from '../../../extensions.js';
 import {
   MODULE_NAME,
   settings_content_class,
@@ -16,6 +15,9 @@ import { log, error, get_current_character_identifier } from './utils.js';
 import { refresh_memory } from './memory.js';
 
 export const default_settings = {
+  // Plugin master toggle per profile
+  disable_plugin: false,
+
   // Message inclusion
   message_length_threshold: 10,
   include_user_messages: true,
@@ -45,7 +47,6 @@ export const default_settings = {
   auto_summarize_on_continue: false,
   auto_summarize_progress: true,
   auto_summarize_on_send: false,
-  auto_summarize_block_generation: true,
   block_chat: true,
 
   // Accumulative memory budgets (percent of max context)
@@ -55,17 +56,10 @@ export const default_settings = {
 
   // Truncation & Injection
   summary_injection_separator: "\n* ",
-  summary_injection_threshold: 10,
-  summary_injection_threshold_type: "messages",
-  exclude_messages_after_threshold: true,
-  keep_last_user_message: true,
   messages_to_keep: 5,
   kept_messages_context_threshold: 30,
 
-  // Cache preservation triggers
-  injection_threshold_update_trigger_messages: 5,
-  injection_threshold_update_trigger_summaries: 0,
-  injection_threshold_update_trigger_context: 0,
+  // Prompt templates
   long_template: default_long_template,
   short_template: default_short_template,
   injection_position: extension_prompt_types?.IN_PROMPT ?? 0,
@@ -103,119 +97,73 @@ export function notify_ui_refresh() {
 }
 
 export function initialize_settings() {
-  if (extension_settings[MODULE_NAME] !== undefined) {
+  if (extension_settings[MODULE_NAME]) {
     log("Settings already initialized.");
-    soft_reset_settings();
   } else {
-    log("Initializing default settings...");
-    extension_settings[MODULE_NAME] = Object.assign(
-      structuredClone(global_settings),
-      structuredClone(default_settings)
-    );
-    extension_settings[MODULE_NAME].profiles['Default'] = structuredClone(default_settings);
-  }
-  if (typeof saveSettingsDebounced === 'function') {
-    saveSettingsDebounced();
-  }
-}
-
-export function soft_reset_settings() {
-  if (!extension_settings[MODULE_NAME] || typeof extension_settings[MODULE_NAME] !== 'object') {
-    extension_settings[MODULE_NAME] = Object.assign(
-      structuredClone(global_settings),
-      structuredClone(default_settings)
-    );
-  }
-  for (let key of Object.keys(global_settings)) {
-    if (extension_settings[MODULE_NAME][key] === undefined) {
-      extension_settings[MODULE_NAME][key] = structuredClone(global_settings[key]);
-    }
-  }
-  for (let key of Object.keys(default_settings)) {
-    if (extension_settings[MODULE_NAME][key] === undefined) {
-      extension_settings[MODULE_NAME][key] = structuredClone(default_settings[key]);
-    }
-  }
-  const profiles = extension_settings[MODULE_NAME].profiles;
-  if (!profiles || typeof profiles !== 'object' || Object.keys(profiles).length === 0) {
+    log("Initializing settings...");
+    extension_settings[MODULE_NAME] = structuredClone(global_settings);
     extension_settings[MODULE_NAME].profiles = {
       'Default': structuredClone(default_settings)
     };
   }
+  load_profile(get_settings('profile'));
 }
 
-export function get_settings(key = null) {
-  const ext = extension_settings[MODULE_NAME];
-  if (!ext) return key !== null ? default_settings[key] : default_settings;
-  if (key === null) {
-    return ext;
+export function copy_settings(profile = null) {
+  let settings = {};
+  let current_settings = extension_settings[MODULE_NAME];
+  if (profile) current_settings = current_settings?.profiles?.[profile];
+  if (!current_settings) return {};
+  for (let key in default_settings) {
+    if (current_settings[key] !== undefined) {
+      settings[key] = structuredClone(current_settings[key]);
+    }
   }
-  let value = ext[key];
-  if (value !== undefined) return value;
-  if (key in default_settings) return default_settings[key];
-  if (key in global_settings) return global_settings[key];
-  return undefined;
+  return settings;
 }
 
-export function set_settings(key, value) {
-  if (!extension_settings[MODULE_NAME]) {
-    extension_settings[MODULE_NAME] = Object.assign(
-      structuredClone(global_settings),
-      structuredClone(default_settings)
-    );
-  }
-  extension_settings[MODULE_NAME][key] = value;
+export function get_settings(name = null) {
+  if (name === null) return extension_settings[MODULE_NAME];
+  let val = extension_settings[MODULE_NAME]?.[name];
+  if (val !== undefined) return val;
+  return default_settings[name];
+}
+
+export function set_settings(name, val) {
+  if (!extension_settings[MODULE_NAME]) extension_settings[MODULE_NAME] = {};
+  extension_settings[MODULE_NAME][name] = val;
   if (typeof saveSettingsDebounced === 'function') {
     saveSettingsDebounced();
   }
 }
 
-// Track settings changes compared to current saved profile
-export function copy_settings(profile = null) {
-  let settings;
-  const ext = extension_settings[MODULE_NAME] || {};
-  if (!profile) {
-    settings = structuredClone(ext);
-  } else {
-    let profiles = ext.profiles || {};
-    if (profiles[profile] === undefined) {
-      if (profile === 'Default') {
-        return structuredClone(default_settings);
-      }
-      return {};
-    }
-    settings = structuredClone(profiles[profile]);
-  }
-  for (let key of Object.keys(global_settings)) {
-    delete settings[key];
-  }
-  return settings;
+export function detect_settings_difference() {
+  let profile = get_settings('profile');
+  let saved = extension_settings[MODULE_NAME]?.profiles?.[profile];
+  if (!saved) return false;
+  return check_objects_different(copy_settings(), saved);
 }
 
-export function check_objects_different(obj_1, obj_2) {
-  if (obj_1 instanceof Object && obj_2 instanceof Object) {
-    let keys = Array.from(new Set([...Object.keys(obj_1), ...Object.keys(obj_2)]));
-    for (let key of keys) {
-      if (check_objects_different(obj_1[key], obj_2[key])) {
-        return true;
-      }
+export function check_objects_different(obj1, obj2) {
+  if (obj1 === obj2) return false;
+  if (!obj1 || !obj2) return true;
+  for (let key of Object.keys(obj1)) {
+    if (typeof obj1[key] === 'object' && obj1[key] !== null) {
+      if (check_objects_different(obj1[key], obj2[key])) return true;
+    } else if (obj1[key] !== obj2[key]) {
+      return true;
     }
-    return false;
   }
-  return obj_1 !== obj_2;
-}
-
-export function detect_settings_difference(profile = null) {
-  if (!profile) profile = get_settings('profile');
-  let current_settings = copy_settings();
-  let profile_settings = copy_settings(profile);
-  return check_objects_different(current_settings, profile_settings);
+  for (let key of Object.keys(obj2)) {
+    if (obj1[key] === undefined) return true;
+  }
+  return false;
 }
 
 export function get_character_profile() {
-  const char_id = get_current_character_identifier();
-  if (!char_id) return null;
-  return extension_settings[MODULE_NAME]?.character_profiles?.[char_id] || null;
+  let key = get_current_character_identifier();
+  if (!key) return null;
+  return get_settings('character_profiles')?.[key] || null;
 }
 
 export function get_chat_profile() {
@@ -224,6 +172,9 @@ export function get_chat_profile() {
 }
 
 export function chat_enabled() {
+  if (get_settings('disable_plugin')) {
+    return false;
+  }
   if (get_settings('use_global_toggle_state')) {
     return get_settings('global_toggle_state');
   }

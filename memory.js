@@ -2,7 +2,7 @@
 import { system_message_types, extension_prompt_roles, extension_prompt_types, chat_metadata } from '../../../../script.js';
 import { getContext, saveMetadataDebounced } from '../../../extensions.js';
 import { MODULE_NAME, generic_memories_macro } from './constants.js';
-import { saveChatDebounced, count_tokens, get_chat_context_size, get_long_token_limit, get_short_token_limit } from "./utils.js";
+import { saveChatDebounced, count_tokens, get_chat_context_size, get_long_token_limit, get_short_token_limit, get_chat_cache_capacity } from "./utils.js";
 import { get_settings, chat_enabled, character_enabled, get_character_key } from "./state.js";
 import { summarize_text, summaryQueue } from "./summarization.js";
 import { default_short_to_long_prompt, default_long_compaction_prompt, default_long_template, default_short_template } from "./macros.js";
@@ -126,17 +126,10 @@ export async function fillup() {
   const chat = ctx.chat;
   if (!Array.isArray(chat) || chat.length === 0) return;
 
-  let long_budget = get_long_token_limit();
-  let short_budget = get_short_token_limit();
-  let reserve_percent = Number(get_settings('compaction_threshold_percent')) || 15;
   let total_context = get_chat_context_size();
-  let system_text = (ctx.characters?.[ctx.characterId]?.description || '') +
-    (ctx.characters?.[ctx.characterId]?.personality || '') +
-    (ctx.characters?.[ctx.characterId]?.scenario || '') +
-    (ctx.characters?.[ctx.characterId]?.mes_example || '');
-  let system_estimate = count_tokens(system_text);
-  let OC = system_estimate + long_budget + short_budget;
-  let CC = Math.floor(total_context * (1 - reserve_percent / 100)) - OC;
+  let { cc_max } = get_chat_cache_capacity(total_context, ctx);
+  let reserve_percent = Number(get_settings('compaction_threshold_percent')) || 15;
+  let CC = Math.floor(cc_max * (1 - reserve_percent / 100));
   if (CC < 100) CC = 100;
 
   let meta = chat_metadata?.memnext || {};

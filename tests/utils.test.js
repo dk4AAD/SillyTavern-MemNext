@@ -8,6 +8,7 @@ import {
   get_chat_context_size,
   get_long_token_limit,
   get_short_token_limit,
+  get_chat_cache_capacity,
   get_free_context_space,
   get_free_context_percent,
   assign_and_prune,
@@ -49,6 +50,15 @@ test('utils.js: context calculation functions work correctly', () => {
   assert.equal(get_free_context_percent(), 100);
 });
 
+test('utils.js: get_chat_cache_capacity subtracts system prompt and memory reserves', () => {
+  const cap = get_chat_cache_capacity(10000);
+  assert.equal(cap.context_size, 10000);
+  assert.ok(cap.long_budget > 0);
+  assert.ok(cap.short_budget > 0);
+  assert.ok(cap.cc_max < 10000);
+  assert.equal(cap.cc_max, 10000 - cap.OC);
+});
+
 test('utils.js: assign_and_prune and assign_defaults work as expected', () => {
   const target = { a: 1, b: 2 };
   assign_and_prune(target, { b: 20, c: 30 });
@@ -60,9 +70,9 @@ test('utils.js: assign_and_prune and assign_defaults work as expected', () => {
 });
 
 test('utils.js: regex helper matches capture groups', () => {
-  const str = "hello {{macro1}} world {{macro2}}";
-  const matches = regex(str, /\{\{(.*?)\}\}/g);
-  assert.deepEqual(matches, ['macro1', 'macro2']);
+  const input = "{{macro1}} and {{macro2}}";
+  const results = regex(input, /\{\{([^}]+)\}\}/g);
+  assert.deepEqual(results, ['macro1', 'macro2']);
 });
 
 test('utils.js: guard_get_element_by_id intercepts empty string safely', () => {

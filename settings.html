@@ -49,6 +49,11 @@
                     </label>
                 </div>
 
+                <label class="checkbox_label" style="margin-top: 5px;" title="Completely disable MemNext memory tracking and injections when this profile is active. Useful for characters or chats that should use default Tavern settings or an alternative plugin.">
+                    <input id="disable_plugin" type="checkbox" />
+                    <span>Disable MemNext in this Profile</span>
+                </label>
+
                 <!-- Prompt Templates (3 Windows) -->
                 <hr>
                 <h4 class="textAlignCenter">Prompt Templates <i class="fa-solid fa-info-circle" title="Three separate prompt templates: message summary, short-to-long compaction, and long-term consolidation."></i></h4>
@@ -124,11 +129,6 @@
                     <span>Before Generation</span>
                 </label>
 
-                <label class="checkbox_label" title="Chat generations will wait until auto-summarization finishes.">
-                    <input id="auto_summarize_block_generation" type="checkbox" />
-                    <span>Block Generation</span>
-                </label>
-
                 <label title="Show the progress bar when auto-summarizing." class="checkbox_label">
                     <input id="auto_summarize_progress" type="checkbox" />
                     <span>Progress Bar</span>
@@ -177,7 +177,7 @@
                 </div>
 
                 <div style="margin-bottom: 8px;">
-                    <label title="Trigger batch compaction when free space in context drops below this percentage of max context.">
+                    <label title="Trigger batch compaction when free space in Chat Cache drops below this percentage of Chat Cache capacity.">
                         <span>Compaction Free Space Trigger: &lt; </span>
                         <input id="compaction_threshold_percent" class="text_pole widthUnset inline_setting" type="number" min="5" max="50" />
                         <span> % (&asymp; <span id="compaction_threshold_tokens_display">0</span> tk)</span>
@@ -198,40 +198,10 @@
                     <span>Messages to Keep</span>
                 </label>
 
-                <label title="Ignore 'Messages to Keep' if they fill up this percentage of the Chat Context (CC)." class="checkbox_label">
+                <label title="Ignore 'Messages to Keep' if they fill up this percentage of Chat Cache (CC)." class="checkbox_label">
                     <input id="kept_messages_context_threshold" class="text_pole inline_setting" type="number" min="0" max="100" />
-                    <span>Ignore Kept Messages if % of CC filled</span>
+                    <span>Ignore Kept Messages if % of Chat Cache filled</span>
                 </label>
-
-                <label title="All messages beyond the raw chat threshold will be hidden from the active chat prompt (replaced by summary injections)." class="checkbox_label">
-                    <input id="exclude_messages_after_threshold" type="checkbox">
-                    <span>Truncate Raw Chat Beyond Threshold</span>
-                </label>
-
-                <label title="This will keep the most recent user message in raw chat context." class="checkbox_label">
-                    <input id="keep_last_user_message" type="checkbox">
-                    <span>Keep Last User Msg</span>
-                </label>
-
-                <label style="margin: 0.2em" title="Freezes the threshold position to reduce context changes and preserve KV cache for local models.">
-                    <span>Cache Preservation Triggers:</span>
-                </label>
-                <div style="margin-left: 1em">
-                    <label title="Update threshold when this many new messages are sent (0 = disabled)">
-                        <input id="injection_threshold_update_trigger_messages" class="text_pole inline_setting" type="number" min="0" max="999" />
-                        <span>new messages</span>
-                    </label>
-                    <br>
-                    <label title="Update threshold when this many new summaries are added (0 = disabled)">
-                        <input id="injection_threshold_update_trigger_summaries" class="text_pole inline_setting" type="number" min="0" max="999" />
-                        <span>new summaries</span>
-                    </label>
-                    <br>
-                    <label title="Update threshold when prompt reaches this percent of max context (0 = disabled)">
-                        <input id="injection_threshold_update_trigger_context" class="text_pole inline_setting" type="number" min="0" max="999" />
-                        <span>% context reached</span>
-                    </label>
-                </div>
 
                 <div style="margin-top: 8px;">
                     <label title="Where memories are injected. Default is In-Prompt (immediately after System Prompt)." class="checkbox_label">

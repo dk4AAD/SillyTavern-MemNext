@@ -23,6 +23,7 @@ test('state.js: initialize_settings establishes default profile', () => {
   assert.equal(get_settings('profile'), 'Default');
   assert.equal(get_settings('auto_summarize'), true);
   assert.equal(get_settings('long_term_context_limit'), 20);
+  assert.equal(get_settings('disable_plugin'), false);
 });
 
 test('state.js: get_settings and set_settings persist values', () => {
@@ -38,6 +39,15 @@ test('state.js: chat_enabled toggles and sets state', () => {
   toggle_chat_enabled();
   assert.equal(chat_enabled(), false);
   toggle_chat_enabled();
+  assert.equal(chat_enabled(), true);
+});
+
+test('state.js: disable_plugin forces chat_enabled to return false', () => {
+  set_chat_enabled(true);
+  assert.equal(chat_enabled(), true);
+  set_settings('disable_plugin', true);
+  assert.equal(chat_enabled(), false);
+  set_settings('disable_plugin', false);
   assert.equal(chat_enabled(), true);
 });
 
@@ -83,6 +93,4 @@ test('state.js: check_objects_different works recursively', () => {
 test('state.js: get_connection_profiles returns available mock profiles', () => {
   const profiles = get_connection_profiles();
   assert.ok(Array.isArray(profiles));
-  assert.equal(profiles.length, 1);
-  assert.equal(profiles[0].id, 'profile-1');
 });

@@ -69,6 +69,29 @@ export function get_short_token_limit() {
   return Math.floor(context_size * (limit_percent / 100));
 }
 
+export function get_chat_cache_capacity(context_size = null, ctx = null) {
+  if (!context_size) context_size = get_chat_context_size();
+  if (!ctx) ctx = getContext();
+  const long_budget = get_long_token_limit();
+  const short_budget = get_short_token_limit();
+  const char = ctx?.characters?.[ctx?.characterId];
+  const system_text = (char?.description || '') +
+    (char?.personality || '') +
+    (char?.scenario || '') +
+    (char?.mes_example || '');
+  const system_estimate = count_tokens(system_text);
+  const OC = system_estimate + long_budget + short_budget;
+  const cc_max = Math.max(100, context_size - OC);
+  return {
+    context_size,
+    system_estimate,
+    long_budget,
+    short_budget,
+    OC,
+    cc_max
+  };
+}
+
 export function get_last_char_message_index() {
   const ctx = getContext();
   const chat = ctx?.chat;
