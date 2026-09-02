@@ -69,13 +69,15 @@ import {
   check_message_exclusion,
   refresh_memory,
   set_budget_refresh_callback,
+  set_memory_refresh_visuals_callback,
   get_injection_threshold_index
 } from './memory.js';
 import {
   summarize_message,
   summaryQueue,
   get_connection_profile_api,
-  set_message_visuals_callback
+  set_message_visuals_callback,
+  set_all_visuals_callback
 } from './summarization.js';
 import {
   default_short_to_long_prompt,
@@ -91,11 +93,17 @@ import {
 set_ui_refresh_callback(() => refresh_settings());
 set_budget_refresh_callback(() => update_context_budget_displays());
 set_message_visuals_callback((i, in_progress, custom_text) => update_message_visuals(i, in_progress, custom_text));
+set_all_visuals_callback(() => update_all_message_visuals());
+set_memory_refresh_visuals_callback(() => update_all_message_visuals());
 
 // Message Visuals in Chat
 function get_message_div(index) {
   if (typeof $ === 'undefined') return null;
-  const div = $(`div[mesid="${index}"]`);
+  let div = $(`#chat .mes[mesid="${index}"]`);
+  if (div.length > 0) return div;
+  div = $(`.mes[mesid="${index}"]`);
+  if (div.length > 0) return div;
+  div = $(`div[mesid="${index}"]`);
   return div.length > 0 ? div : null;
 }
 
@@ -182,7 +190,7 @@ export function open_edit_memory_input(index) {
 
 export function update_message_visuals(i, in_progress = false, custom_text = null) {
   const div = get_message_div(i);
-  if (!div) return;
+  if (!div || div.length === 0) return;
   div.find(`div.${summary_div_class}`).remove();
 
   // Control message exclusion visuals
@@ -232,9 +240,10 @@ export function update_message_visuals(i, in_progress = false, custom_text = nul
 }
 
 export function update_all_message_visuals() {
+  if (typeof $ === 'undefined') return;
   const ctx = getContext();
   const chat = ctx?.chat;
-  if (!Array.isArray(chat)) return;
+  if (!Array.isArray(chat) || chat.length === 0) return;
   for (let i = 0; i < chat.length; i++) {
     update_message_visuals(i);
   }

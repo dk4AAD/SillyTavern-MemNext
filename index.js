@@ -8,7 +8,8 @@ import {
   init_interfaces,
   initialize_settings_ui,
   initialize_popout,
-  initialize_message_buttons
+  initialize_message_buttons,
+  update_all_message_visuals
 } from './ui.js';
 import {
   refresh_memory,
@@ -157,12 +158,21 @@ if (typeof jQuery !== 'undefined') {
         eventSource.on(event_types.MESSAGE_EDITED, id => on_chat_event('message_edited', id));
         eventSource.on(event_types.MESSAGE_SWIPED, id => on_chat_event('message_swiped', id));
         eventSource.on(event_types.CHAT_CHANGED, () => on_chat_event('chat_changed'));
-        eventSource.on(event_types.MORE_MESSAGES_LOADED, refresh_memory);
+        if (event_types.CHAT_LOADED) {
+          eventSource.on(event_types.CHAT_LOADED, () => on_chat_event('chat_changed'));
+        }
+        eventSource.on(event_types.MORE_MESSAGES_LOADED, () => {
+          refresh_memory();
+          update_all_message_visuals();
+        });
         eventSource.on(event_types.GENERATION_STARTED, (type, _params, isDryRun) => on_chat_event('before_message', { type, isDryRun }));
       }
     }
 
     refresh_memory();
+    update_all_message_visuals();
+    setTimeout(() => update_all_message_visuals(), 100);
+    setTimeout(() => update_all_message_visuals(), 400);
     log(`${MODULE_NAME_FANCY} loaded successfully.`);
   });
 }

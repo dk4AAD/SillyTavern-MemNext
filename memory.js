@@ -19,6 +19,18 @@ export function notify_budget_refresh() {
   }
 }
 
+// Optional callback for visual update on memory refresh
+let _memory_refresh_visuals_callback = null;
+export function set_memory_refresh_visuals_callback(fn) {
+  _memory_refresh_visuals_callback = fn;
+}
+
+export function notify_memory_refresh_visuals() {
+  if (typeof _memory_refresh_visuals_callback === 'function') {
+    _memory_refresh_visuals_callback();
+  }
+}
+
 // Data validation and access helpers
 export function get_data(message, key) {
   if (!message || typeof message !== 'object') return null;
@@ -97,6 +109,7 @@ export async function refresh_memory() {
     await fillup();
   } finally {
     is_filling_up = false;
+    notify_memory_refresh_visuals();
   }
 }
 

@@ -9,7 +9,7 @@ import { get_settings, chat_enabled, get_active_connection_profile, auto_load_pr
 import { set_data, get_memory, check_message_exclusion, refresh_memory, fillup, INJECTION_THRESHOLD_INDEX, set_injection_threshold_index, get_injection_threshold_index } from './memory.js';
 import { create_summary_prompt } from './macros.js';
 
-// Visual update callback hook to prevent tight UI coupling
+// Visual update callback hooks to prevent tight UI coupling
 let _message_visuals_callback = null;
 export function set_message_visuals_callback(fn) {
   _message_visuals_callback = fn;
@@ -18,6 +18,17 @@ export function set_message_visuals_callback(fn) {
 export function update_message_visuals(index, in_progress = false, custom_text = null) {
   if (typeof _message_visuals_callback === 'function') {
     _message_visuals_callback(index, in_progress, custom_text);
+  }
+}
+
+let _all_message_visuals_callback = null;
+export function set_all_visuals_callback(fn) {
+  _all_message_visuals_callback = fn;
+}
+
+export function update_all_message_visuals() {
+  if (typeof _all_message_visuals_callback === 'function') {
+    _all_message_visuals_callback();
   }
 }
 
@@ -238,11 +249,23 @@ export async function on_chat_event(event, data = null) {
   debug(`Handling chat event: ${event}`);
   switch (event) {
     case 'user_message':
+      if (data !== null && data !== undefined) {
+        update_message_visuals(Number(data));
+      }
+      refresh_memory();
+      await auto_summarize_chat();
+      break;
     case 'char_message':
+      if (data !== null && data !== undefined) {
+        update_message_visuals(Number(data));
+      }
       refresh_memory();
       await auto_summarize_chat();
       break;
     case 'message_edited':
+      if (data !== null && data !== undefined) {
+        update_message_visuals(Number(data));
+      }
       if (get_settings('auto_summarize_on_edit') && data !== null) {
         summaryQueue.add(data);
         await summaryQueue.run();
@@ -253,6 +276,9 @@ export async function on_chat_event(event, data = null) {
       refresh_memory();
       break;
     case 'message_swiped':
+      if (data !== null && data !== undefined) {
+        update_message_visuals(Number(data));
+      }
       if (get_settings('auto_summarize_on_swipe') && data !== null) {
         summaryQueue.add(data);
         await summaryQueue.run();
@@ -264,11 +290,15 @@ export async function on_chat_event(event, data = null) {
       set_injection_threshold_index(null);
       if (chat_metadata?.memnext) chat_metadata.memnext.iti = null;
       notify_ui_refresh();
-      refresh_memory();
+      await refresh_memory();
+      update_all_message_visuals();
+      setTimeout(() => update_all_message_visuals(), 100);
+      setTimeout(() => update_all_message_visuals(), 400);
       break;
     case 'message_deleted':
       if (chat_metadata?.memnext) chat_metadata.memnext.iti = null;
       refresh_memory();
+      update_all_message_visuals();
       break;
     case 'before_message':
       if (get_settings('auto_summarize_on_send')) {
