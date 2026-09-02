@@ -116,6 +116,7 @@ const default_summary_macros = {
     "speaker": { name: "speaker", default: true, enabled: true, type: "special", instruct_template: false, apply_regex: true, description: "The name of the character or user who sent the message" },
     "words": { name: "words", default: true, enabled: true, type: "custom", instruct_template: false, apply_regex: false, command: "/memnext-max-summary-tokens", description: "Max response tokens defined by preset" },
     "history": { name: "history", default: true, enabled: false, type: "preset", instruct_template: true, apply_regex: true, start: 1, end: 6, bot_messages: true, user_messages: true, bot_summaries: false, user_summaries: false }
+    "crop_history": { name: "crop_history", default: true, enabled: true, type: "special", instruct_template: false, apply_regex: false, description: "Extract N previous messages (e.g. {{crop_history 5}})" }
 };
 
 const default_settings = {
@@ -1136,11 +1137,13 @@ async function compact_history(compact_start, history_calc_message, old_history)
     let prompt_template = get_settings('short_to_long_prompt') || default_short_to_long_prompt;
     
     summaryQueue.show_progress(0, chunks.length);
+    let old_size = old_history ? count_tokens(old_history) : 0;
     for (let i = 0; i < chunks.length; i++) {
         let combined = chunks[i].join('\n');
         let compiled = prompt_template
-            .replace(/{{existing_long_memory}}/g, '')
-            .replace(/{{new_events}}/g, combined);
+            .replace(/{{existing_long_memory}}/g, old_history || '')
+            .replace(/{{new_events}}/g, combined)
+            .replace(/{{long_term_memory_size}}/g, old_size);
             
         const payload = [{ role: 'system', content: compiled }];
         let res = await summarize_text(payload);
@@ -1157,7 +1160,10 @@ async function compact_history(compact_start, history_calc_message, old_history)
     if (old_history) {
         let combined_all = old_history + "\n" + combined_new;
         if (count_tokens(combined_all) > long_budget) {
-            let compiled = long_compaction_template.replace(/{{long_memory}}/g, combined_all);
+            let size = count_tokens(combined_all);
+            let compiled = long_compaction_template
+                .replace(/{{long_memory}}/g, combined_all)
+                .replace(/{{long_term_memory_size}}/g, size);
             summaryQueue.show_progress(0, 1);
             final_long = await summarize_text([{ role: 'system', content: compiled }]);
             summaryQueue.show_progress(1, 1);
@@ -1167,7 +1173,10 @@ async function compact_history(compact_start, history_calc_message, old_history)
         }
     } else {
         if (count_tokens(combined_new) > long_budget) {
-            let compiled = long_compaction_template.replace(/{{long_memory}}/g, combined_new);
+            let size = count_tokens(combined_new);
+            let compiled = long_compaction_template
+                .replace(/{{long_memory}}/g, combined_new)
+                .replace(/{{long_term_memory_size}}/g, size);
             summaryQueue.show_progress(0, 1);
             final_long = await summarize_text([{ role: 'system', content: compiled }]);
             summaryQueue.show_progress(1, 1);
@@ -1361,7 +1370,21 @@ class PromptEditInterface {
         this.title = config.title;
         this.description = config.description;
         this.default_prompt = config.default_prompt;
+        this.macros = config.macros || [];
         this.ctx = getContext();
+
+        let macros_html = "";
+        if (this.macros.length > 0) {
+            macros_html = `<div style="flex: 1; border: 1px solid var(--SmartThemeBorderColor); border-radius: 5px; padding: 10px; overflow-y: auto; background-color: var(--SmartThemeBlurTintColor);">
+                <h4 style="margin-top: 0; margin-bottom: 10px;">Available Macros</h4>`;
+            for (let m of this.macros) {
+                macros_html += `<div style="margin-bottom: 10px;">
+                    <div style="font-family: monospace; font-weight: bold; margin-bottom: 3px;">{{${m.name}}}</div>
+                    <div style="font-size: 0.9em; opacity: 0.9;">${m.desc}</div>
+                </div>`;
+            }
+            macros_html += `</div>`;
+        }
 
         this.html_template = `
 <div id="memnext_prompt_interface" style="height: 100%; display: flex; flex-direction: column;">
@@ -1370,8 +1393,11 @@ class PromptEditInterface {
         <i class="fa-solid fa-info-circle" title="${this.description}"></i>
         <button id="restore_default" class="menu_button fa-solid fa-recycle red_button" title="Restore default prompt" style="margin-left: auto;"></button>
     </div>
-    <div style="flex: 1; margin-bottom: 10px;">
-        <textarea id="prompt_text" class="text_pole" style="width: 100%; height: 100%; box-sizing: border-box; resize: none; font-family: monospace;"></textarea>
+    <div style="flex: 1; display: flex; gap: 10px; margin-bottom: 10px;">
+        <div style="${this.macros.length > 0 ? 'flex: 2;' : 'flex: 1;'}">
+            <textarea id="prompt_text" class="text_pole" style="width: 100%; height: 100%; box-sizing: border-box; resize: none; font-family: monospace;"></textarea>
+        </div>
+        ${macros_html}
     </div>
 </div>
 `;
@@ -1916,14 +1942,23 @@ jQuery(async function () {
         setting_key: 'short_to_long_prompt',
         title: 'Short \u2192 Long Compaction Prompt',
         description: 'Template used to consolidate graduating short-term memories into the long-term narrative.',
-        default_prompt: default_short_to_long_prompt
+        default_prompt: default_short_to_long_prompt,
+        macros: [
+            {name: 'existing_long_memory', desc: 'The existing long-term narrative summary.'},
+            {name: 'new_events', desc: 'The block of recent short-term memories graduating to long-term.'},
+            {name: 'long_term_memory_size', desc: 'The current token size of the existing long-term memory.'}
+        ]
     });
 
     promptInterface3 = new PromptEditInterface({
         setting_key: 'long_compaction_prompt',
         title: 'Long-Term Compaction Prompt',
         description: 'Template used to re-compact the long-term narrative when it approaches its token limit.',
-        default_prompt: default_long_compaction_prompt
+        default_prompt: default_long_compaction_prompt,
+        macros: [
+            {name: 'long_memory', desc: 'The combined long-term narrative that needs to be compacted.'},
+            {name: 'long_term_memory_size', desc: 'The current token size of the combined long-term memory.'}
+        ]
     });
 
     memoryEditInterface = new MemoryEditInterface();
@@ -2691,6 +2726,9 @@ class SummaryPromptEditInterface {
             return this.special_macro_message(index)
         }
         if (name === "speaker") {
+        if (name === "crop_history") {
+            return [{content: ""}]
+        }
             return this.special_macro_speaker(index)
         }
 
