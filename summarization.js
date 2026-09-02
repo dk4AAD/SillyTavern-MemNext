@@ -359,7 +359,6 @@ export async function on_chat_event(event, data = null) {
       if (data !== null && data !== undefined) {
         update_message_visuals(Number(data));
       }
-      refresh_memory();
       await auto_summarize_chat();
       break;
     case 'message_edited':

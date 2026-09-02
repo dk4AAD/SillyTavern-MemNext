@@ -259,7 +259,7 @@ export async function try_first_to_keep(CC) {
 export async function try_for_cc(CC) {
   const ctx = getContext();
   const chat = ctx?.chat;
-  if (!Array.isArray(chat)) return [null, null, null];
+  if (!Array.isArray(chat) || chat.length === 0) return [null, null, null];
 
   let sum = 0;
   for (let i = chat.length - 1; i >= 0; i--) {
@@ -281,7 +281,9 @@ export async function try_for_cc(CC) {
 export async function calculate_memo(history_calc_message) {
   const ctx = getContext();
   const chat = ctx?.chat;
-  if (!Array.isArray(chat)) return [null, null, null];
+  if (!Array.isArray(chat) || chat.length === 0) return [null, null, null];
+
+  history_calc_message = Math.max(0, Math.min(chat.length - 1, Number(history_calc_message) || 0));
 
   let short_history_size = 0;
   let i = history_calc_message;
@@ -303,15 +305,18 @@ export async function calculate_memo(history_calc_message) {
   }
 
   let short_budget = get_short_token_limit();
+  let messages_to_keep = Number(get_settings('messages_to_keep')) || 5;
+  let max_iti = Math.max(0, chat.length - messages_to_keep - 1);
+
   if (short_history_size <= short_budget) {
     let short_indexes = [];
-    for (let j = compact_start; j <= history_calc_message; j++) {
-      if (chat[j]) short_indexes.push(j);
+    if (compact_start <= history_calc_message) {
+      for (let j = compact_start; j <= history_calc_message; j++) {
+        if (chat[j]) short_indexes.push(j);
+      }
     }
     let current_size = short_history_size;
     let iti = history_calc_message;
-    let messages_to_keep = Number(get_settings('messages_to_keep')) || 5;
-    let max_iti = chat.length - messages_to_keep - 1;
 
     for (let j = history_calc_message + 1; j <= max_iti; j++) {
       let mem = get_memory(chat[j]);
@@ -332,8 +337,6 @@ export async function calculate_memo(history_calc_message) {
     let short_indexes = [];
     let current_size = 0;
     let iti = history_calc_message;
-    let messages_to_keep = Number(get_settings('messages_to_keep')) || 5;
-    let max_iti = chat.length - messages_to_keep - 1;
 
     for (let j = history_calc_message + 1; j <= max_iti; j++) {
       let mem = get_memory(chat[j]);
@@ -355,7 +358,7 @@ export async function calculate_memo(history_calc_message) {
 export async function compact_history(compact_start, history_calc_message, old_history) {
   const ctx = getContext();
   const chat = ctx?.chat;
-  if (!Array.isArray(chat)) return old_history || "";
+  if (!Array.isArray(chat) || chat.length === 0) return old_history || "";
 
   let summaries = [];
   for (let i = compact_start; i <= history_calc_message; i++) {
