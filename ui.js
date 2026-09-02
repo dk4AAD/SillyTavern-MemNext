@@ -279,6 +279,9 @@ export function initialize_settings_ui() {
       $el.prop('checked', Boolean(get_settings(key)));
       $el.off('change.memnext').on('change.memnext', function () {
         set_settings(key, $(this).prop('checked'));
+        if (key === 'disable_plugin') {
+          $(`.${settings_content_class} #memnext_profile_options`).toggle(!$(this).prop('checked'));
+        }
         refresh_memory();
         update_save_icon_highlight();
       });
@@ -432,6 +435,9 @@ export function refresh_settings() {
       element.val(val);
     }
   }
+  const is_disabled = Boolean(get_settings('disable_plugin'));
+  $(`.${settings_content_class} #memnext_profile_options`).toggle(!is_disabled);
+
   const enabled = chat_enabled();
   $(`.${settings_content_class} #toggle_chat_memory span`).text(enabled ? (t ? t`Memory: Enabled` : `Memory: Enabled`) : (t ? t`Memory: Disabled` : `Memory: Disabled`));
   $(`.${settings_content_class} #toggle_chat_memory`).toggleClass('button_highlight', enabled);
