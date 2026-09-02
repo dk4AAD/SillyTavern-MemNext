@@ -98,3 +98,154 @@ export async function get_connection_profile_api() {
 export function get_summary_max_tokens() {
   return amount_gen || 50;
 }
+
+export class SummaryQueue {
+  tasks = [];
+  active_workers = 0;
+  aborted = false;
+  constructor() {
+    this.progress_bar = $(`<div id="${PROGRESS_BAR_ID}" class="memnext_progress_bar" style="display:none;"><div class="progress_bar_fill"></div></div>`);
+  }
+  init_ui() {
+    $('#sheld').append(this.progress_bar);
+  }
+  add(index) {
+    if (!this.tasks.includes(index)) {
+      this.tasks.push(index);
+    }
+  }
+  clear() {
+    this.tasks = [];
+    this.aborted = true;
+    this.hide_progress();
+    this.unblock_chat();
+  }
+  show_progress(completed, total) {
+    if (!get_settings('auto_summarize_progress')) return;
+    this.progress_bar.show();
+    const percent = total > 0 ? Math.round(completed / total * 100) : 0;
+    this.progress_bar.find('.progress_bar_fill').css('width', `${percent}%`);
+  }
+  hide_progress() {
+    this.progress_bar.hide();
+    this.progress_bar.find('.progress_bar_fill').css('width', `0%`);
+  }
+  block_chat() {
+    if (!get_settings('block_chat')) return;
+    $('#send_textarea').prop('disabled', true);
+    $('#send_button').prop('disabled', true);
+  }
+  unblock_chat() {
+    $('#send_textarea').prop('disabled', false);
+    $('#send_button').prop('disabled', false);
+  }
+  async run() {
+    if (this.tasks.length === 0) return;
+    this.aborted = false;
+    this.block_chat();
+    const total = this.tasks.length;
+    let completed = 0;
+    this.show_progress(completed, total);
+    const concurrency = Math.max(1, Number(get_settings('parallel_summaries_count')) || 1);
+    const time_delay = Number(get_settings('summarization_time_delay')) || 0;
+    const worker = async () => {
+      while (this.tasks.length > 0 && !this.aborted) {
+        const index = this.tasks.shift();
+        if (index === undefined) break;
+        try {
+          await summarize_message(index);
+        } catch (e) {
+          error(`Error summarizing message [${index}]:`, e);
+        }
+        completed++;
+        this.show_progress(completed, total);
+        if (time_delay > 0 && this.tasks.length > 0) {
+          await new Promise(r => setTimeout(r, time_delay * 1000));
+        }
+      }
+    };
+    const workers = [];
+    for (let w = 0; w < concurrency; w++) {
+      workers.push(worker());
+    }
+    await Promise.allSettled(workers);
+    this.hide_progress();
+    this.unblock_chat();
+    refresh_memory();
+    saveChatDebounced();
+  }
+}
+
+// Single Message Summarization Flow
+
+// Generate Interceptor (Truncate Raw Chat Beyond Threshold)
+globalThis.memnext_intercept_messages = async function (chat, _contextSize, _abort, type) {
+  if (!chat_enabled()) return;
+  if (!get_settings('exclude_messages_after_threshold')) return;
+  await fillup();
+  if (!Array.isArray(chat) || chat.length === 0) return;
+  const ctx = getContext();
+  const IGNORE_SYMBOL = ctx?.symbols?.ignore || Symbol.for('ignore');
+  let start = chat.length - 1;
+  if (type === 'continue') start--;
+  let iti = INJECTION_THRESHOLD_INDEX !== null ? INJECTION_THRESHOLD_INDEX : -1;
+  for (let i = start; i >= 0; i--) {
+    const message = chat[i];
+    if (!message || typeof message !== 'object') continue;
+    chat[i] = structuredClone(chat[i]);
+    chat[i].extra = chat[i].extra || {};
+    chat[i].extra[IGNORE_SYMBOL] = i <= iti;
+  }
+};
+
+// UI Rendering & Message Visuals
+
+// Chat event router
+async function on_chat_event(event, data = null) {
+  debug(`Handling chat event: ${event}`);
+  switch (event) {
+    case 'user_message':
+    case 'char_message':
+      // No need to call refresh_memory() here because the interceptor will call fillup() when generating,
+      // and char_message doesn't need immediate fillup until the next turn. 
+      // But we can call it to keep UI updated.
+      refresh_memory();
+      await auto_summarize_chat();
+      break;
+    case 'message_edited':
+      if (get_settings('auto_summarize_on_edit') && data !== null) {
+        summaryQueue.add(data);
+        await summaryQueue.run();
+      }
+      if (chat_metadata.memnext && data <= chat_metadata.memnext.iti) {
+        chat_metadata.memnext.iti = null; // force short_term recalculation
+      }
+      refresh_memory();
+      break;
+    case 'message_swiped':
+      if (get_settings('auto_summarize_on_swipe') && data !== null) {
+        summaryQueue.add(data);
+        await summaryQueue.run();
+      }
+      refresh_memory();
+      break;
+    case 'chat_changed':
+      auto_load_profile();
+      INJECTION_THRESHOLD_INDEX = null;
+      if (chat_metadata.memnext) chat_metadata.memnext.iti = null;
+      refresh_settings();
+      refresh_memory();
+      break;
+    case 'message_deleted':
+      if (chat_metadata.memnext) chat_metadata.memnext.iti = null;
+      refresh_memory();
+      break;
+    case 'before_message':
+      if (get_settings('auto_summarize_on_send')) {
+        await auto_summarize_chat();
+      }
+      break;
+  }
+}
+
+// Prompt Edit Modal Interface (Re-usable for all 3 prompts)
