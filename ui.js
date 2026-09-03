@@ -69,6 +69,7 @@ import {
   get_chat_long_term_memory,
   set_chat_long_term_memory,
   get_last_long_term_history_block,
+  get_long_term_cutoff_index,
   update_long_term_history_range,
   delete_long_term_history_range,
   check_message_exclusion,
@@ -881,12 +882,18 @@ export class MemoryEditInterface {
       const endIndex = Math.min(reverseIndices.length, startIndex + this.pageSize);
       const visibleIndices = reverseIndices.slice(startIndex, endIndex);
 
+      const cutoffIndex = get_long_term_cutoff_index();
+
       for (let i of visibleIndices) {
         const msg = chat[i];
         if (!msg) continue;
         const mem = get_memory(msg) || '';
         const sender = msg.name || (msg.is_user ? 'User' : 'Character');
         const isChecked = this.selectedIndices.has(i);
+        const isEditable = (i > cutoffIndex);
+        const textColor = isEditable ? 'color: #ffffff;' : 'color: #2e8b57;';
+        const displayTitle = isEditable ? 'Click or use Edit button to edit summary' : 'Summary is prior to long-term history cutoff and cannot be edited';
+        const buttonTitle = isEditable ? 'Edit Summary' : 'Cannot edit summaries prior to long-term history cutoff';
 
         const $tr = $(`<tr>
                     <td class="checkbox_col">
@@ -895,10 +902,10 @@ export class MemoryEditInterface {
                     <td>${i}</td>
                     <td><b>${escape_string(sender)}</b></td>
                     <td class="memory_text_cell">
-                        <span class="mem_display" style="cursor: pointer;" title="Click or use Edit button to edit summary">${escape_string(mem)}</span>
+                        <span class="mem_display" style="${textColor} cursor: ${isEditable ? 'pointer' : 'default'};" title="${displayTitle}">${escape_string(mem)}</span>
                     </td>
                     <td class="memory_actions_cell">
-                        <button class="menu_button row_edit fa-solid fa-pencil" title="Edit Summary"></button>
+                        <button class="menu_button row_edit fa-solid fa-pencil" title="${buttonTitle}" ${isEditable ? '' : 'disabled'}></button>
                         <button class="menu_button row_summarize fa-solid fa-quote-left" title="Summarize"></button>
                         <button class="menu_button row_clear fa-solid fa-trash red_button" title="Delete"></button>
                     </td>
@@ -952,8 +959,10 @@ export class MemoryEditInterface {
           });
         };
 
-        $tr.find('.row_edit').on('click', startEdit);
-        $tr.find('.mem_display').on('click', startEdit);
+        if (isEditable) {
+          $tr.find('.row_edit').on('click', startEdit);
+          $tr.find('.mem_display').on('click', startEdit);
+        }
 
         $tr.find('.memnext_message_checkbox').on('change', (e) => {
           if (e.target.checked) {

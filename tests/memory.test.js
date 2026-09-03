@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { compute_hash } from '../utils.js';
 import {
+  get_long_term_cutoff_index,
   get_last_long_term_history_block,
   update_long_term_history_range,
   delete_long_term_history_range,
@@ -285,4 +286,23 @@ test('memory.js: get_last_long_term_history_block finds the last consolidated en
   assert.equal(remainingBlock.startIndex, 1);
   assert.equal(remainingBlock.endIndex, 3);
   assert.equal(remainingBlock.text, 'Chapter 1: The Gathering');
+});
+
+
+test('memory.js: get_long_term_cutoff_index returns the first long-term message index when scanning from end', () => {
+  mockChat.length = 0;
+  for (let i = 0; i < 10; i++) {
+    mockChat.push({ mes: `Msg ${i}` });
+  }
+
+  // No long term history
+  assert.equal(get_long_term_cutoff_index(), -1);
+
+  // Stamping 1..3
+  update_long_term_history_range(1, 3, 'Old long term');
+  assert.equal(get_long_term_cutoff_index(), 3);
+
+  // Stamping 5..8
+  update_long_term_history_range(5, 8, 'Newer long term');
+  assert.equal(get_long_term_cutoff_index(), 8);
 });

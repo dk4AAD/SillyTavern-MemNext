@@ -542,3 +542,17 @@ export function update_long_term_history_range(startIndex, endIndex, text) {
 export function delete_long_term_history_range(startIndex, endIndex) {
   update_long_term_history_range(startIndex, endIndex, null);
 }
+
+
+export function get_long_term_cutoff_index() {
+  const ctx = getContext();
+  const chat = ctx?.chat;
+  if (!Array.isArray(chat) || chat.length === 0) return -1;
+
+  for (let i = chat.length - 1; i >= 0; i--) {
+    if (chat[i] && get_data(chat[i], 'long_term_history')) {
+      return i;
+    }
+  }
+  return -1;
+}
