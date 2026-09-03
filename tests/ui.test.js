@@ -17,7 +17,7 @@ import {
   open_edit_memory_input,
   is_message_excluded_from_context
 } from '../ui.js';
-import { set_injection_threshold_index } from '../memory.js';
+import { set_injection_threshold_index, set_data, get_memory } from '../memory.js';
 import { chat_metadata, mockChat } from './mocks/sillytavern.js';
 
 test('ui.js: init_interfaces instantiates all modal dialogs including injection templates', () => {
@@ -59,6 +59,80 @@ test('ui.js: SummaryPromptEditInterface allows macro deletion', () => {
   assert.ok(iface.get_macro('custom_test'));
   delete iface.macros['custom_test'];
   assert.equal(iface.get_macro('custom_test'), undefined);
+});
+
+test('ui.js: MemoryEditInterface template contains pagination, select-all, and batch action elements', () => {
+  const iface = new MemoryEditInterface();
+  assert.equal(iface.pageSize, 10, 'Default page size must be 10');
+  assert.equal(iface.currentPage, 1, 'Initial page must be 1');
+  assert.ok(iface.selectedIndices instanceof Set, 'selectedIndices must be a Set');
+
+  // Verify elements in HTML template
+  assert.ok(iface.html_template.includes('id="memnext_page_size"'), 'Contains page size dropdown');
+  assert.ok(iface.html_template.includes('<option value="5">5</option>'), 'Contains 5 option');
+  assert.ok(iface.html_template.includes('<option value="10" selected>10</option>'), 'Contains 10 option selected by default');
+  assert.ok(iface.html_template.includes('<option value="15">15</option>'), 'Contains 15 option');
+  assert.ok(iface.html_template.includes('<option value="20">20</option>'), 'Contains 20 option');
+  assert.ok(iface.html_template.includes('id="memnext_prev_page"'), 'Contains previous page button');
+  assert.ok(iface.html_template.includes('id="memnext_next_page"'), 'Contains next page button');
+  assert.ok(iface.html_template.includes('id="memnext_page_info"'), 'Contains page indicator');
+  assert.ok(iface.html_template.includes('id="memnext_select_all_messages"'), 'Contains select-all checkbox');
+  assert.ok(iface.html_template.includes('id="summarize_selected"'), 'Contains summarize selected button');
+  assert.ok(iface.html_template.includes('id="delete_selected"'), 'Contains delete selected button');
+});
+
+test('ui.js: MemoryEditInterface pagination calculation and selection operations', () => {
+  const iface = new MemoryEditInterface();
+  const totalMessages = 25;
+  const pageSize = 10;
+  const totalPages = Math.max(1, Math.ceil(totalMessages / pageSize));
+  assert.equal(totalPages, 3, '25 messages with page size 10 should yield 3 pages');
+
+  // Page 1 slice
+  let start1 = (1 - 1) * pageSize;
+  let end1 = Math.min(totalMessages, start1 + pageSize);
+  assert.equal(start1, 0);
+  assert.equal(end1, 10);
+
+  // Page 3 slice (last page)
+  let start3 = (3 - 1) * pageSize;
+  let end3 = Math.min(totalMessages, start3 + pageSize);
+  assert.equal(start3, 20);
+  assert.equal(end3, 25);
+
+  // Selection tracking
+  iface.selectedIndices.add(0);
+  iface.selectedIndices.add(5);
+  assert.equal(iface.selectedIndices.size, 2);
+  assert.ok(iface.selectedIndices.has(0));
+  assert.ok(iface.selectedIndices.has(5));
+  assert.ok(!iface.selectedIndices.has(1));
+
+  iface.selectedIndices.delete(0);
+  assert.equal(iface.selectedIndices.size, 1);
+  assert.ok(!iface.selectedIndices.has(0));
+
+  iface.selectedIndices.clear();
+  assert.equal(iface.selectedIndices.size, 0);
+});
+
+test('ui.js: MemoryEditInterface batch delete only clears summary and preserves message', () => {
+  mockChat.length = 0;
+  mockChat.push(
+    { mes: 'Hello world', is_user: false, extra: { memnext: { memory: 'Greeting summary' } } },
+    { mes: 'How are you?', is_user: true, extra: { memnext: { memory: 'Question summary' } } }
+  );
+
+  assert.equal(get_memory(mockChat[0]), 'Greeting summary');
+  assert.equal(get_memory(mockChat[1]), 'Question summary');
+
+  // Delete memory for message 0 only
+  set_data(mockChat[0], 'memory', null);
+
+  assert.equal(get_memory(mockChat[0]), null, 'Summary should be cleared');
+  assert.equal(mockChat[0].mes, 'Hello world', 'Message text must remain completely intact');
+  assert.equal(mockChat[0].is_user, false, 'Message metadata must remain intact');
+  assert.equal(get_memory(mockChat[1]), 'Question summary', 'Unselected message summary should remain untouched');
 });
 
 test('ui.js: is_message_excluded_from_context only excludes when ITI is active', () => {

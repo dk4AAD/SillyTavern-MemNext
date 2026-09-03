@@ -269,6 +269,13 @@ dialog:has(#memnext_memory_state_interface) {
     background: var(--SmartThemeBlurTintColor);
 }
 
+#memnext_memory_state_interface th.checkbox_col,
+#memnext_memory_state_interface td.checkbox_col {
+    width: 36px;
+    min-width: 36px;
+    text-align: center;
+}
+
 #memnext_memory_state_interface td.memory_text_cell {
     width: 100%;
     word-break: break-word;

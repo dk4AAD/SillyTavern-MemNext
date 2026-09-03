@@ -648,18 +648,39 @@ export class PromptEditInterface {
 // MemoryEditInterface
 export class MemoryEditInterface {
   ctx = getContext();
+  pageSize = 10;
+  currentPage = 1;
+  selectedIndices = new Set();
+
   constructor() {
     this.html_template = `
 <div id="memnext_memory_state_interface">
-    <div class="flex-container justifyspacebetween alignitemscenter">
-        <h3>Memory State</h3>
-        <button id="refresh_table" class="menu_button fa-solid fa-sync margin0" title="Refresh Table"></button>
+    <div class="flex-container justifyspacebetween alignitemscenter" style="gap: 10px; margin-bottom: 5px;">
+        <h3 class="margin0">Memory State</h3>
+        <div class="flex-container alignitemscenter" style="gap: 10px; margin-left: auto;">
+            <label class="flex-container alignitemscenter" style="gap: 5px; margin: 0; font-size: 0.9em;" title="Number of messages to display per page">
+                <span>Display on page:</span>
+                <select id="memnext_page_size" class="text_pole widthUnset inline_setting" style="margin: 0; padding: 2px 6px;">
+                    <option value="5">5</option>
+                    <option value="10" selected>10</option>
+                    <option value="15">15</option>
+                    <option value="20">20</option>
+                </select>
+            </label>
+            <div class="flex-container alignitemscenter" style="gap: 5px;">
+                <button id="memnext_prev_page" class="menu_button fa-solid fa-chevron-left margin0" title="Previous Page"></button>
+                <span id="memnext_page_info" style="font-size: 0.9em; min-width: 90px; text-align: center;">Page 1 / 1</span>
+                <button id="memnext_next_page" class="menu_button fa-solid fa-chevron-right margin0" title="Next Page"></button>
+            </div>
+            <button id="refresh_table" class="menu_button fa-solid fa-sync margin0" title="Refresh Table"></button>
+        </div>
     </div>
     <hr>
     <div id="progress_bar"></div>
     <table cellspacing="0">
         <thead>
             <tr>
+                <th class="checkbox_col"><input type="checkbox" id="memnext_select_all_messages" title="Select all on this page"></th>
                 <th title="Message ID"><i class="fa-solid fa-hashtag"></i></th>
                 <th title="Sender"><i class="fa-solid fa-comment"></i></th>
                 <th title="Summary Text">Summary</th>
@@ -669,8 +690,10 @@ export class MemoryEditInterface {
         <tbody></tbody>
     </table>
     <hr>
-    <div class="flex-container alignitemscenter">
+    <div class="flex-container alignitemscenter" style="gap: 10px; flex-wrap: wrap;">
         <button id="bulk_summarize_all" class="menu_button"><i class="fa-solid fa-quote-left"></i> Summarize All Empty</button>
+        <button id="summarize_selected" class="menu_button" disabled><i class="fa-solid fa-list-check"></i> Summarize Selected</button>
+        <button id="delete_selected" class="menu_button red_button" disabled><i class="fa-solid fa-trash"></i> Delete Selected</button>
     </div>
 </div>
 `;
@@ -684,15 +707,72 @@ export class MemoryEditInterface {
     const $content = $(popup.content);
     $content.closest('dialog').css('min-width', '80%');
 
+    this.pageSize = 10;
+    this.currentPage = 1;
+    this.selectedIndices = new Set();
+
+    const $tbody = $content.find('tbody');
+    const $selectAll = $content.find('#memnext_select_all_messages');
+    const $pageSize = $content.find('#memnext_page_size');
+    const $prevBtn = $content.find('#memnext_prev_page');
+    const $nextBtn = $content.find('#memnext_next_page');
+    const $pageInfo = $content.find('#memnext_page_info');
+    const $summarizeSelected = $content.find('#summarize_selected');
+    const $deleteSelected = $content.find('#delete_selected');
+
+    $pageSize.val(String(this.pageSize));
+
+    const updateActionButtons = () => {
+      const hasSelection = this.selectedIndices.size > 0;
+      $summarizeSelected.prop('disabled', !hasSelection);
+      $deleteSelected.prop('disabled', !hasSelection);
+    };
+
+    const updateSelectAllState = (visibleIndices) => {
+      if (!visibleIndices || visibleIndices.length === 0) {
+        $selectAll.prop('checked', false).prop('indeterminate', false);
+        return;
+      }
+      const allSelected = visibleIndices.every(idx => this.selectedIndices.has(idx));
+      const someSelected = visibleIndices.some(idx => this.selectedIndices.has(idx));
+      if (allSelected) {
+        $selectAll.prop('checked', true).prop('indeterminate', false);
+      } else if (someSelected) {
+        $selectAll.prop('checked', false).prop('indeterminate', true);
+      } else {
+        $selectAll.prop('checked', false).prop('indeterminate', false);
+      }
+    };
+
     const populate = () => {
-      const $tbody = $content.find('tbody').empty();
+      $tbody.empty();
       const chat = this.ctx?.chat || [];
-      for (let i = 0; i < chat.length; i++) {
+      const totalMessages = chat.length;
+      const totalPages = Math.max(1, Math.ceil(totalMessages / this.pageSize));
+
+      if (this.currentPage > totalPages) this.currentPage = totalPages;
+      if (this.currentPage < 1) this.currentPage = 1;
+
+      $pageInfo.text(`Page ${this.currentPage} / ${totalPages}`);
+      $prevBtn.prop('disabled', this.currentPage <= 1);
+      $nextBtn.prop('disabled', this.currentPage >= totalPages);
+
+      const startIndex = (this.currentPage - 1) * this.pageSize;
+      const endIndex = Math.min(totalMessages, startIndex + this.pageSize);
+      const visibleIndices = [];
+
+      for (let i = startIndex; i < endIndex; i++) {
         const msg = chat[i];
         if (!msg) continue;
+        visibleIndices.push(i);
         const mem = get_memory(msg) || '';
         const sender = msg.name || (msg.is_user ? 'User' : 'Character');
+        const isChecked = this.selectedIndices.has(i);
+
         const $tr = $(`<tr>
+                    <td class="checkbox_col">
+                        <input type="checkbox" class="memnext_message_checkbox" data-index="${i}" ${isChecked ? 'checked' : ''}>
+                    </td>
                     <td>${i}</td>
                     <td><b>${escape_string(sender)}</b></td>
                     <td class="memory_text_cell"><span class="mem_display">${escape_string(mem)}</span></td>
@@ -701,21 +781,82 @@ export class MemoryEditInterface {
                         <button class="menu_button row_clear fa-solid fa-trash red_button" title="Delete"></button>
                     </td>
                 </tr>`);
+
+        $tr.find('.memnext_message_checkbox').on('change', (e) => {
+          if (e.target.checked) {
+            this.selectedIndices.add(i);
+          } else {
+            this.selectedIndices.delete(i);
+          }
+          updateSelectAllState(visibleIndices);
+          updateActionButtons();
+        });
+
         $tr.find('.row_summarize').on('click', async () => {
           await summarize_message(i);
           populate();
         });
+
         $tr.find('.row_clear').on('click', () => {
           set_data(msg, 'memory', null);
           populate();
           refresh_memory();
           saveChatDebounced();
         });
+
         $tbody.append($tr);
       }
+
+      updateSelectAllState(visibleIndices);
+      updateActionButtons();
     };
 
+    $selectAll.on('change', () => {
+      const chat = this.ctx?.chat || [];
+      const totalMessages = chat.length;
+      const startIndex = (this.currentPage - 1) * this.pageSize;
+      const endIndex = Math.min(totalMessages, startIndex + this.pageSize);
+      const visibleIndices = [];
+      for (let i = startIndex; i < endIndex; i++) {
+        if (chat[i]) visibleIndices.push(i);
+      }
+      const allSelected = visibleIndices.length > 0 && visibleIndices.every(idx => this.selectedIndices.has(idx));
+      if (allSelected) {
+        for (let idx of visibleIndices) {
+          this.selectedIndices.delete(idx);
+        }
+      } else {
+        for (let idx of visibleIndices) {
+          this.selectedIndices.add(idx);
+        }
+      }
+      populate();
+    });
+
+    $pageSize.on('change', () => {
+      this.pageSize = Number($pageSize.val()) || 10;
+      this.currentPage = 1;
+      populate();
+    });
+
+    $prevBtn.on('click', () => {
+      if (this.currentPage > 1) {
+        this.currentPage--;
+        populate();
+      }
+    });
+
+    $nextBtn.on('click', () => {
+      const chat = this.ctx?.chat || [];
+      const totalPages = Math.max(1, Math.ceil(chat.length / this.pageSize));
+      if (this.currentPage < totalPages) {
+        this.currentPage++;
+        populate();
+      }
+    });
+
     $content.find('#refresh_table').on('click', populate);
+
     $content.find('#bulk_summarize_all').on('click', async () => {
       const chat = this.ctx?.chat || [];
       for (let i = 0; i < chat.length; i++) {
@@ -728,6 +869,40 @@ export class MemoryEditInterface {
       } else {
         await refresh_memory();
       }
+      update_all_message_visuals();
+      populate();
+    });
+
+    $summarizeSelected.on('click', async () => {
+      if (this.selectedIndices.size === 0) return;
+      const chat = this.ctx?.chat || [];
+      const sorted = Array.from(this.selectedIndices).sort((a, b) => a - b);
+      for (let idx of sorted) {
+        if (chat[idx]) {
+          summaryQueue.add(idx);
+        }
+      }
+      if (summaryQueue.tasks.length > 0) {
+        await summaryQueue.run();
+      } else {
+        await refresh_memory();
+      }
+      update_all_message_visuals();
+      populate();
+    });
+
+    $deleteSelected.on('click', async () => {
+      if (this.selectedIndices.size === 0) return;
+      const chat = this.ctx?.chat || [];
+      for (let idx of this.selectedIndices) {
+        const msg = chat[idx];
+        if (msg) {
+          set_data(msg, 'memory', null);
+        }
+      }
+      this.selectedIndices.clear();
+      saveChatDebounced();
+      await refresh_memory();
       update_all_message_visuals();
       populate();
     });
