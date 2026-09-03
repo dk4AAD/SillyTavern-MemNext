@@ -79,6 +79,27 @@ test('ui.js: MemoryEditInterface template contains pagination, select-all, and b
   assert.ok(iface.html_template.includes('id="memnext_select_all_messages"'), 'Contains select-all checkbox');
   assert.ok(iface.html_template.includes('id="summarize_selected"'), 'Contains summarize selected button');
   assert.ok(iface.html_template.includes('id="delete_selected"'), 'Contains delete selected button');
+
+  // Verify tab elements
+  assert.equal(iface.activeTab, 'short_term');
+  assert.ok(iface.html_template.includes('id="tab_btn_short_term"'), 'Contains short-term tab button');
+  assert.ok(iface.html_template.includes('id="tab_btn_long_term"'), 'Contains long-term tab button');
+  assert.ok(iface.html_template.includes('id="memnext_tab_short_term"'), 'Contains short-term tab content container');
+  assert.ok(iface.html_template.includes('id="memnext_tab_long_term"'), 'Contains long-term tab content container');
+  assert.ok(iface.html_template.includes('id="long_term_memory_container"'), 'Contains long-term memory container');
+});
+
+test('ui.js: MemoryEditInterface allows manual summary editing', () => {
+  const msg = { mes: 'Some action', extra: { memnext: { memory: 'Auto summary' } } };
+  assert.equal(get_memory(msg), 'Auto summary');
+
+  // Manually edit summary
+  const editedText = 'Handcrafted custom summary by user';
+  set_data(msg, 'memory', editedText);
+  set_data(msg, 'edited', true);
+
+  assert.equal(get_memory(msg), editedText);
+  assert.equal(msg.extra.memnext.edited, true);
 });
 
 test('ui.js: MemoryEditInterface pagination calculation and selection operations', () => {

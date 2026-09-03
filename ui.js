@@ -66,6 +66,7 @@ import {
   get_data,
   set_data,
   get_memory,
+  get_chat_long_term_memory,
   set_chat_long_term_memory,
   check_message_exclusion,
   refresh_memory,
@@ -651,49 +652,72 @@ export class MemoryEditInterface {
   pageSize = 10;
   currentPage = 1;
   selectedIndices = new Set();
+  activeTab = 'short_term';
 
   constructor() {
     this.html_template = `
-<div id="memnext_memory_state_interface">
-    <div class="flex-container justifyspacebetween alignitemscenter" style="gap: 10px; margin-bottom: 5px;">
-        <h3 class="margin0">Memory State</h3>
-        <div class="flex-container alignitemscenter" style="gap: 10px; margin-left: auto;">
-            <label class="flex-container alignitemscenter" style="gap: 5px; margin: 0; font-size: 0.9em;" title="Number of messages to display per page">
-                <span>Display on page:</span>
-                <select id="memnext_page_size" class="text_pole widthUnset inline_setting" style="margin: 0; padding: 2px 6px;">
-                    <option value="5">5</option>
-                    <option value="10" selected>10</option>
-                    <option value="15">15</option>
-                    <option value="20">20</option>
-                </select>
-            </label>
-            <div class="flex-container alignitemscenter" style="gap: 5px;">
-                <button id="memnext_prev_page" class="menu_button fa-solid fa-chevron-left margin0" title="Previous Page"></button>
-                <span id="memnext_page_info" style="font-size: 0.9em; min-width: 90px; text-align: center;">Page 1 / 1</span>
-                <button id="memnext_next_page" class="menu_button fa-solid fa-chevron-right margin0" title="Next Page"></button>
+<div id="memnext_memory_state_interface" style="height: 100%; display: flex; flex-direction: column;">
+    <div class="flex-container alignitemscenter" style="gap: 10px; margin-bottom: 10px; border-bottom: 1px solid var(--SmartThemeBorderColor); padding-bottom: 8px;">
+        <button id="tab_btn_short_term" class="menu_button tab_button active"><i class="fa-solid fa-clock-rotate-left"></i> Short-Term Memory</button>
+        <button id="tab_btn_long_term" class="menu_button tab_button"><i class="fa-solid fa-book-bookmark"></i> Long-Term Memory</button>
+        <button id="refresh_table" class="menu_button fa-solid fa-sync margin0" title="Refresh Table" style="margin-left: auto;"></button>
+    </div>
+
+    <!-- Tab 1: Short-Term Memory -->
+    <div id="memnext_tab_short_term" class="memnext_tab_content" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+        <div class="flex-container justifyspacebetween alignitemscenter" style="gap: 10px; margin-bottom: 5px;">
+            <div class="flex-container alignitemscenter" style="gap: 10px; margin-left: auto;">
+                <label class="flex-container alignitemscenter" style="gap: 5px; margin: 0; font-size: 0.9em;" title="Number of messages to display per page">
+                    <span>Display on page:</span>
+                    <select id="memnext_page_size" class="text_pole widthUnset inline_setting" style="margin: 0; padding: 2px 6px;">
+                        <option value="5">5</option>
+                        <option value="10" selected>10</option>
+                        <option value="15">15</option>
+                        <option value="20">20</option>
+                    </select>
+                </label>
+                <div class="flex-container alignitemscenter" style="gap: 5px;">
+                    <button id="memnext_prev_page" class="menu_button fa-solid fa-chevron-left margin0" title="Previous Page"></button>
+                    <span id="memnext_page_info" style="font-size: 0.9em; min-width: 90px; text-align: center;">Page 1 / 1</span>
+                    <button id="memnext_next_page" class="menu_button fa-solid fa-chevron-right margin0" title="Next Page"></button>
+                </div>
             </div>
-            <button id="refresh_table" class="menu_button fa-solid fa-sync margin0" title="Refresh Table"></button>
+        </div>
+        <hr style="margin: 5px 0;">
+        <div id="progress_bar"></div>
+        <div style="flex: 1; overflow-y: auto;">
+            <table cellspacing="0" style="width: 100%;">
+                <thead>
+                    <tr>
+                        <th class="checkbox_col"><input type="checkbox" id="memnext_select_all_messages" title="Select all on this page"></th>
+                        <th title="Message ID"><i class="fa-solid fa-hashtag"></i></th>
+                        <th title="Sender"><i class="fa-solid fa-comment"></i></th>
+                        <th title="Summary Text">Summary</th>
+                        <th class="actions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <hr style="margin: 5px 0;">
+        <div class="flex-container alignitemscenter" style="gap: 10px; flex-wrap: wrap;">
+            <button id="bulk_summarize_all" class="menu_button"><i class="fa-solid fa-quote-left"></i> Summarize All Empty</button>
+            <button id="summarize_selected" class="menu_button" disabled><i class="fa-solid fa-list-check"></i> Summarize Selected</button>
+            <button id="delete_selected" class="menu_button red_button" disabled><i class="fa-solid fa-trash"></i> Delete Selected</button>
         </div>
     </div>
-    <hr>
-    <div id="progress_bar"></div>
-    <table cellspacing="0">
-        <thead>
-            <tr>
-                <th class="checkbox_col"><input type="checkbox" id="memnext_select_all_messages" title="Select all on this page"></th>
-                <th title="Message ID"><i class="fa-solid fa-hashtag"></i></th>
-                <th title="Sender"><i class="fa-solid fa-comment"></i></th>
-                <th title="Summary Text">Summary</th>
-                <th class="actions">Actions</th>
-            </tr>
-        </thead>
-        <tbody></tbody>
-    </table>
-    <hr>
-    <div class="flex-container alignitemscenter" style="gap: 10px; flex-wrap: wrap;">
-        <button id="bulk_summarize_all" class="menu_button"><i class="fa-solid fa-quote-left"></i> Summarize All Empty</button>
-        <button id="summarize_selected" class="menu_button" disabled><i class="fa-solid fa-list-check"></i> Summarize Selected</button>
-        <button id="delete_selected" class="menu_button red_button" disabled><i class="fa-solid fa-trash"></i> Delete Selected</button>
+
+    <!-- Tab 2: Long-Term Memory -->
+    <div id="memnext_tab_long_term" class="memnext_tab_content" style="flex: 1; display: none; flex-direction: column; overflow: hidden;">
+        <div class="flex-container justifyspacebetween alignitemscenter" style="margin-bottom: 5px;">
+            <h4 class="margin0">Long-Term Memory</h4>
+        </div>
+        <hr style="margin: 5px 0;">
+        <div id="long_term_memory_container" style="flex: 1; display: flex; flex-direction: column; overflow-y: auto;">
+            <div id="long_term_placeholder" style="opacity: 0.8; font-style: italic; padding: 12px;">
+                No long-term memory consolidated yet.
+            </div>
+        </div>
     </div>
 </div>
 `;
@@ -710,6 +734,41 @@ export class MemoryEditInterface {
     this.pageSize = 10;
     this.currentPage = 1;
     this.selectedIndices = new Set();
+    this.activeTab = 'short_term';
+
+    const $tabBtnShort = $content.find('#tab_btn_short_term');
+    const $tabBtnLong = $content.find('#tab_btn_long_term');
+    const $tabContentShort = $content.find('#memnext_tab_short_term');
+    const $tabContentLong = $content.find('#memnext_tab_long_term');
+    const $ltContainer = $content.find('#long_term_memory_container');
+
+    const switchTab = (tab) => {
+      this.activeTab = tab;
+      if (tab === 'short_term') {
+        $tabBtnShort.addClass('active');
+        $tabBtnLong.removeClass('active');
+        $tabContentShort.show().css('display', 'flex');
+        $tabContentLong.hide();
+      } else {
+        $tabBtnLong.addClass('active');
+        $tabBtnShort.removeClass('active');
+        $tabContentLong.show().css('display', 'flex');
+        $tabContentShort.hide();
+        populateLongTerm();
+      }
+    };
+
+    $tabBtnShort.on('click', () => switchTab('short_term'));
+    $tabBtnLong.on('click', () => switchTab('long_term'));
+
+    const populateLongTerm = () => {
+      const longMem = get_chat_long_term_memory();
+      if (longMem && longMem.trim().length > 0) {
+        $ltContainer.html(`<div style="padding: 12px; white-space: pre-wrap; font-family: monospace; background: var(--SmartThemeBlurTintColor); border: 1px solid var(--SmartThemeBorderColor); border-radius: 5px; flex: 1; overflow-y: auto;">${escape_string(longMem)}</div>`);
+      } else {
+        $ltContainer.html(`<div id="long_term_placeholder" style="opacity: 0.8; font-style: italic; padding: 12px;">No long-term memory consolidated yet.</div>`);
+      }
+    };
 
     const $tbody = $content.find('tbody');
     const $selectAll = $content.find('#memnext_select_all_messages');
@@ -775,12 +834,68 @@ export class MemoryEditInterface {
                     </td>
                     <td>${i}</td>
                     <td><b>${escape_string(sender)}</b></td>
-                    <td class="memory_text_cell"><span class="mem_display">${escape_string(mem)}</span></td>
+                    <td class="memory_text_cell">
+                        <span class="mem_display" style="cursor: pointer;" title="Click or use Edit button to edit summary">${escape_string(mem)}</span>
+                    </td>
                     <td class="memory_actions_cell">
+                        <button class="menu_button row_edit fa-solid fa-pencil" title="Edit Summary"></button>
                         <button class="menu_button row_summarize fa-solid fa-quote-left" title="Summarize"></button>
                         <button class="menu_button row_clear fa-solid fa-trash red_button" title="Delete"></button>
                     </td>
                 </tr>`);
+
+        const startEdit = () => {
+          const currentMem = get_memory(msg) || '';
+          const $cell = $tr.find('.memory_text_cell');
+          const $actions = $tr.find('.memory_actions_cell');
+          $actions.find('.row_edit, .row_summarize, .row_clear').prop('disabled', true);
+
+          const $editContainer = $(`
+            <div class="inline_edit_container" style="display: flex; gap: 5px; align-items: center; width: 100%;">
+                <textarea class="text_pole inline_edit_textarea" style="flex: 1; resize: vertical; min-height: 40px; font-size: 0.9em; box-sizing: border-box;"></textarea>
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <button class="menu_button row_save fa-solid fa-check" title="Save (Enter)" style="color: #28a745; margin: 0;"></button>
+                    <button class="menu_button row_cancel fa-solid fa-xmark red_button" title="Cancel (Esc)" style="margin: 0;"></button>
+                </div>
+            </div>
+          `);
+
+          $cell.empty().append($editContainer);
+          const $textarea = $editContainer.find('textarea');
+          $textarea.val(currentMem).focus();
+
+          const saveEdit = async () => {
+            const newMem = $textarea.val().trim();
+            if (newMem !== currentMem) {
+              set_data(msg, 'memory', newMem || null);
+              set_data(msg, 'edited', true);
+              saveChatDebounced();
+              await refresh_memory();
+              update_all_message_visuals();
+            }
+            populate();
+          };
+
+          const cancelEdit = () => {
+            populate();
+          };
+
+          $editContainer.find('.row_save').on('click', saveEdit);
+          $editContainer.find('.row_cancel').on('click', cancelEdit);
+
+          $textarea.on('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              saveEdit();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              cancelEdit();
+            }
+          });
+        };
+
+        $tr.find('.row_edit').on('click', startEdit);
+        $tr.find('.mem_display').on('click', startEdit);
 
         $tr.find('.memnext_message_checkbox').on('change', (e) => {
           if (e.target.checked) {
@@ -855,7 +970,13 @@ export class MemoryEditInterface {
       }
     });
 
-    $content.find('#refresh_table').on('click', populate);
+    $content.find('#refresh_table').on('click', () => {
+      if (this.activeTab === 'short_term') {
+        populate();
+      } else {
+        populateLongTerm();
+      }
+    });
 
     $content.find('#bulk_summarize_all').on('click', async () => {
       const chat = this.ctx?.chat || [];

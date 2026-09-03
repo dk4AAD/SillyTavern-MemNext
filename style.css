@@ -283,3 +283,16 @@ dialog:has(#memnext_memory_state_interface) {
 #memnext_memory_state_interface td.memory_actions_cell {
     white-space: nowrap;
 }
+
+#memnext_memory_state_interface .tab_button {
+    cursor: pointer;
+    border-radius: 4px;
+    padding: 6px 14px;
+    transition: background-color 0.2s ease;
+}
+
+#memnext_memory_state_interface .tab_button.active {
+    background: var(--SmartThemeQuoteColor, #2E8B57) !important;
+    color: white !important;
+    font-weight: bold;
+}
