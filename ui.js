@@ -490,9 +490,9 @@ export function initialize_message_buttons() {
   if (typeof $ === 'undefined') return;
   const message_buttons_template = `
 <div class="${css_button_separator}"></div>
-<div class="mes_button fa-solid fa-quote-left ${summarize_button_class}" title="Summarize message (MemNext)"></div>
-<div class="mes_button fa-solid fa-pencil ${edit_button_class}" title="Edit summary (MemNext)"></div>
-<div class="mes_button fa-solid fa-trash ${forget_button_class}" title="Delete summary (MemNext)"></div>
+<div class="mes_button fa-solid fa-quote-left memnext_mes_button ${summarize_button_class}" title="Summarize message (MemNext)"></div>
+<div class="mes_button fa-solid fa-pencil memnext_mes_button ${edit_button_class}" title="Edit summary (MemNext)"></div>
+<div class="mes_button fa-solid fa-broom memnext_mes_button ${forget_button_class}" title="Delete summary (MemNext)"></div>
 `;
 
   $(document).on('click', `.${summarize_button_class}`, async function () {

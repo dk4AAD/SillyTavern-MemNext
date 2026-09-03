@@ -131,6 +131,14 @@ label.checkbox_label > span:first-child {
     margin: 0 1em;
 }
 
+.mes_button.memnext_mes_button {
+    color: #3b82f6 !important;
+}
+
+.mes_button.memnext_mes_button:hover {
+    color: #60a5fa !important;
+}
+
 /* Inline edit textarea */
 .memnext_edit_textarea {
     margin: 4px 0 6px 0;
