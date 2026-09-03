@@ -17,7 +17,8 @@ import {
   open_edit_memory_input,
   is_message_excluded_from_context
 } from '../ui.js';
-import { set_injection_threshold_index, set_data, get_memory } from '../memory.js';
+import { set_injection_threshold_index, set_data, get_memory, update_long_term_history_range } from '../memory.js';
+import { count_tokens } from '../utils.js';
 import { chat_metadata, mockChat } from './mocks/sillytavern.js';
 
 test('ui.js: init_interfaces instantiates all modal dialogs including injection templates', () => {
@@ -198,4 +199,11 @@ test('ui.js: Visual, save highlight, and budget display helpers execute safely w
   update_save_icon_highlight();
   open_edit_memory_input(0);
   assert.ok(true);
+});
+
+
+test('ui.js: count_tokens import works cleanly for long-term token display', () => {
+  const blockText = 'Testing token count import in ui.js';
+  const tokenCount = count_tokens(blockText);
+  assert.ok(tokenCount > 0, 'count_tokens must return positive token count');
 });
