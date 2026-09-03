@@ -882,6 +882,7 @@ export class MemoryEditInterface {
           summaryQueue.add(idx);
         }
       }
+      this.selectedIndices.clear();
       if (summaryQueue.tasks.length > 0) {
         await summaryQueue.run();
       } else {

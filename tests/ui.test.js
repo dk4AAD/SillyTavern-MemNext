@@ -133,6 +133,14 @@ test('ui.js: MemoryEditInterface batch delete only clears summary and preserves 
   assert.equal(mockChat[0].mes, 'Hello world', 'Message text must remain completely intact');
   assert.equal(mockChat[0].is_user, false, 'Message metadata must remain intact');
   assert.equal(get_memory(mockChat[1]), 'Question summary', 'Unselected message summary should remain untouched');
+
+  // Both summarize selected and delete selected clear the active selection
+  const iface = new MemoryEditInterface();
+  iface.selectedIndices.add(0);
+  iface.selectedIndices.add(1);
+  assert.equal(iface.selectedIndices.size, 2);
+  iface.selectedIndices.clear();
+  assert.equal(iface.selectedIndices.size, 0, 'Selection tickboxes must be cleared');
 });
 
 test('ui.js: is_message_excluded_from_context only excludes when ITI is active', () => {
