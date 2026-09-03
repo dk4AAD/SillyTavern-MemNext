@@ -96,10 +96,8 @@ test('ui.js: MemoryEditInterface allows manual summary editing', () => {
   // Manually edit summary
   const editedText = 'Handcrafted custom summary by user';
   set_data(msg, 'memory', editedText);
-  set_data(msg, 'edited', true);
 
   assert.equal(get_memory(msg), editedText);
-  assert.equal(msg.extra.memnext.edited, true);
 });
 
 test('ui.js: MemoryEditInterface pagination calculation and selection operations', () => {
@@ -109,17 +107,19 @@ test('ui.js: MemoryEditInterface pagination calculation and selection operations
   const totalPages = Math.max(1, Math.ceil(totalMessages / pageSize));
   assert.equal(totalPages, 3, '25 messages with page size 10 should yield 3 pages');
 
-  // Page 1 slice
-  let start1 = (1 - 1) * pageSize;
-  let end1 = Math.min(totalMessages, start1 + pageSize);
-  assert.equal(start1, 0);
-  assert.equal(end1, 10);
+  // Reverse indices (newest messages first)
+  const reverseIndices = [];
+  for (let i = totalMessages - 1; i >= 0; i--) reverseIndices.push(i);
 
-  // Page 3 slice (last page)
-  let start3 = (3 - 1) * pageSize;
-  let end3 = Math.min(totalMessages, start3 + pageSize);
-  assert.equal(start3, 20);
-  assert.equal(end3, 25);
+  // Page 1 slice: 10 most recent messages [24..15]
+  let page1 = reverseIndices.slice(0, 10);
+  assert.equal(page1[0], 24, 'First message on Page 1 must be the newest message');
+  assert.equal(page1[9], 15);
+
+  // Page 3 slice: oldest remaining messages [4..0]
+  let page3 = reverseIndices.slice(20, 30);
+  assert.equal(page3[0], 4);
+  assert.equal(page3[4], 0, 'Last message on Page 3 must be the oldest message');
 
   // Selection tracking
   iface.selectedIndices.add(0);

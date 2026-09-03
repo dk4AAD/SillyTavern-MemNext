@@ -155,8 +155,6 @@ export function open_edit_memory_input(index) {
     $textarea.remove();
     if (new_memory !== memory) {
       set_data(message, 'memory', new_memory || null);
-      set_data(message, 'edited', true);
-      refresh_memory();
       saveChatDebounced();
     }
     update_message_visuals(index);
@@ -816,14 +814,19 @@ export class MemoryEditInterface {
       $prevBtn.prop('disabled', this.currentPage <= 1);
       $nextBtn.prop('disabled', this.currentPage >= totalPages);
 
-      const startIndex = (this.currentPage - 1) * this.pageSize;
-      const endIndex = Math.min(totalMessages, startIndex + this.pageSize);
-      const visibleIndices = [];
+      // Collect chat message indices in reverse chronological order (newest messages first)
+      const reverseIndices = [];
+      for (let i = totalMessages - 1; i >= 0; i--) {
+        if (chat[i]) reverseIndices.push(i);
+      }
 
-      for (let i = startIndex; i < endIndex; i++) {
+      const startIndex = (this.currentPage - 1) * this.pageSize;
+      const endIndex = Math.min(reverseIndices.length, startIndex + this.pageSize);
+      const visibleIndices = reverseIndices.slice(startIndex, endIndex);
+
+      for (let i of visibleIndices) {
         const msg = chat[i];
         if (!msg) continue;
-        visibleIndices.push(i);
         const mem = get_memory(msg) || '';
         const sender = msg.name || (msg.is_user ? 'User' : 'Character');
         const isChecked = this.selectedIndices.has(i);
@@ -864,13 +867,11 @@ export class MemoryEditInterface {
           const $textarea = $editContainer.find('textarea');
           $textarea.val(currentMem).focus();
 
-          const saveEdit = async () => {
+          const saveEdit = () => {
             const newMem = $textarea.val().trim();
             if (newMem !== currentMem) {
               set_data(msg, 'memory', newMem || null);
-              set_data(msg, 'edited', true);
               saveChatDebounced();
-              await refresh_memory();
               update_all_message_visuals();
             }
             populate();
@@ -915,8 +916,8 @@ export class MemoryEditInterface {
         $tr.find('.row_clear').on('click', () => {
           set_data(msg, 'memory', null);
           populate();
-          refresh_memory();
           saveChatDebounced();
+          update_all_message_visuals();
         });
 
         $tbody.append($tr);
@@ -928,13 +929,14 @@ export class MemoryEditInterface {
 
     $selectAll.on('change', () => {
       const chat = this.ctx?.chat || [];
-      const totalMessages = chat.length;
-      const startIndex = (this.currentPage - 1) * this.pageSize;
-      const endIndex = Math.min(totalMessages, startIndex + this.pageSize);
-      const visibleIndices = [];
-      for (let i = startIndex; i < endIndex; i++) {
-        if (chat[i]) visibleIndices.push(i);
+      const reverseIndices = [];
+      for (let i = chat.length - 1; i >= 0; i--) {
+        if (chat[i]) reverseIndices.push(i);
       }
+      const startIndex = (this.currentPage - 1) * this.pageSize;
+      const endIndex = Math.min(reverseIndices.length, startIndex + this.pageSize);
+      const visibleIndices = reverseIndices.slice(startIndex, endIndex);
+
       const allSelected = visibleIndices.length > 0 && visibleIndices.every(idx => this.selectedIndices.has(idx));
       if (allSelected) {
         for (let idx of visibleIndices) {
@@ -1006,14 +1008,12 @@ export class MemoryEditInterface {
       this.selectedIndices.clear();
       if (summaryQueue.tasks.length > 0) {
         await summaryQueue.run();
-      } else {
-        await refresh_memory();
       }
       update_all_message_visuals();
       populate();
     });
 
-    $deleteSelected.on('click', async () => {
+    $deleteSelected.on('click', () => {
       if (this.selectedIndices.size === 0) return;
       const chat = this.ctx?.chat || [];
       for (let idx of this.selectedIndices) {
@@ -1024,7 +1024,6 @@ export class MemoryEditInterface {
       }
       this.selectedIndices.clear();
       saveChatDebounced();
-      await refresh_memory();
       update_all_message_visuals();
       populate();
     });
