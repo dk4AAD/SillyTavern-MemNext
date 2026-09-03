@@ -1,6 +1,10 @@
 import test from 'node:test';
+import { mockChat } from './mocks/sillytavern.js';
 import assert from 'node:assert/strict';
 import {
+  get_summary_initialized,
+  set_summary_initialized,
+  is_chat_loaded,
   initialize_settings,
   get_settings,
   set_settings,
@@ -96,4 +100,18 @@ test('state.js: check_objects_different works recursively', () => {
 test('state.js: get_connection_profiles returns available mock profiles', () => {
   const profiles = get_connection_profiles();
   assert.ok(Array.isArray(profiles));
+});
+
+
+test('state.js: summary_initialized and is_chat_loaded helpers', () => {
+  assert.equal(get_summary_initialized(), false);
+  set_summary_initialized(true);
+  assert.equal(get_summary_initialized(), true);
+  set_summary_initialized(false);
+  assert.equal(get_summary_initialized(), false);
+
+  mockChat.length = 0;
+  assert.equal(is_chat_loaded(), false);
+  mockChat.push({ mes: 'Msg 1' });
+  assert.equal(is_chat_loaded(), true);
 });

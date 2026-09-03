@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { compute_hash } from '../utils.js';
 import {
+  initialize_chat_summarization,
   get_long_term_cutoff_index,
   get_last_long_term_history_block,
   update_long_term_history_range,
@@ -24,6 +25,7 @@ import {
   compact_history
 } from '../memory.js';
 import { chat_metadata, mockChat } from './mocks/sillytavern.js';
+import { get_summary_initialized } from '../state.js';
 
 test('memory.js: get_data and set_data manage message extra properties', () => {
   const msg = {};
@@ -334,4 +336,22 @@ test('memory.js: strict per-message long_term_history management', () => {
   delete_long_term_history_range(0, 4);
   assert.equal(get_long_term_cutoff_index(), -1);
   assert.equal(get_last_long_term_history_block(), null);
+});
+
+
+test('memory.js: initialize_chat_summarization stamps prior history across prefix messages', async () => {
+  mockChat.length = 0;
+  for (let i = 0; i < 10; i++) {
+    mockChat.push({ mes: `Msg ${i}` });
+  }
+
+  // Initialize with mode 'last_n', count 4, and user provided prior history
+  await initialize_chat_summarization({ mode: 'last_n', count: 4, priorHistory: 'Prequel story before event.' });
+
+  assert.equal(get_summary_initialized(), true);
+
+  // Messages 0 to 5 (prior to summarized range 6..9) should have prior history stamped
+  for (let i = 0; i <= 5; i++) {
+    assert.equal(get_data(mockChat[i], 'long_term_history'), 'Prequel story before event.');
+  }
 });

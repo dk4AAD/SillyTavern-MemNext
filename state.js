@@ -40,7 +40,6 @@ export const default_settings = {
   auto_summarize: true,
   summarization_time_delay: 0,
   summarization_time_delay_skip_first: false,
-  auto_summarize_message_limit: -1,
   parallel_summaries_count: 1,
   auto_summarize_on_edit: false,
   auto_summarize_on_swipe: true,
@@ -82,7 +81,7 @@ export const global_settings = {
 export const settings_ui_map = {};
 
 // Listener hook for UI refresh without hard cyclic dependency
-let _ui_refresh_callback = null;
+var _ui_refresh_callback = null;
 export function set_ui_refresh_callback(fn) {
   _ui_refresh_callback = fn;
 }
@@ -480,4 +479,28 @@ export function get_active_connection_profile() {
 
 export function get_summary_connection_profile() {
   return get_active_connection_profile()?.id;
+}
+
+
+export function is_chat_loaded() {
+  const ctx = getContext();
+  return Array.isArray(ctx?.chat) && ctx.chat.length > 0;
+}
+
+export function get_summary_initialized() {
+  if (!chat_metadata || typeof chat_metadata !== 'object') return false;
+  const memData = chat_metadata[MODULE_NAME];
+  if (!memData || typeof memData !== 'object') return false;
+  return Boolean(memData.summary_initialized);
+}
+
+export function set_summary_initialized(val) {
+  if (!chat_metadata || typeof chat_metadata !== 'object') return;
+  if (!chat_metadata[MODULE_NAME] || typeof chat_metadata[MODULE_NAME] !== 'object') {
+    chat_metadata[MODULE_NAME] = {};
+  }
+  chat_metadata[MODULE_NAME].summary_initialized = Boolean(val);
+  if (typeof saveMetadataDebounced === 'function') {
+    saveMetadataDebounced();
+  }
 }

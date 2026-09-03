@@ -3,12 +3,12 @@ import { system_message_types, extension_prompt_roles, extension_prompt_types, c
 import { getContext, saveMetadataDebounced } from '../../../extensions.js';
 import { MODULE_NAME, long_memory_macro, short_memory_macro, generic_memories_macro } from './constants.js';
 import { saveChatDebounced, count_tokens, get_chat_context_size, get_long_token_limit, get_short_token_limit, get_chat_cache_capacity, compute_hash } from "./utils.js";
-import { get_settings, chat_enabled, character_enabled, get_character_key } from "./state.js";
+import { get_settings, chat_enabled, character_enabled, get_character_key, get_summary_initialized, set_summary_initialized, is_chat_loaded } from "./state.js";
 import { summarize_text, summaryQueue } from "./summarization.js";
-import { default_short_to_long_prompt, default_long_compaction_prompt, default_long_template, default_short_template } from "./macros.js";
+import { default_short_to_long_prompt, default_long_compaction_prompt, default_long_template, default_short_template, create_summary_prompt } from "./macros.js";
 
 // Optional callback for UI budget display refresh
-let _ui_budget_refresh_callback = null;
+var _ui_budget_refresh_callback = null;
 export function set_budget_refresh_callback(fn) {
   _ui_budget_refresh_callback = fn;
 }
@@ -20,7 +20,7 @@ export function notify_budget_refresh() {
 }
 
 // Optional callback for visual update on memory refresh
-let _memory_refresh_visuals_callback = null;
+var _memory_refresh_visuals_callback = null;
 export function set_memory_refresh_visuals_callback(fn) {
   _memory_refresh_visuals_callback = fn;
 }
@@ -558,4 +558,60 @@ export function get_long_term_cutoff_index() {
   }
 
   return -1;
+}
+
+
+export async function initialize_chat_summarization({ mode = 'all', count = 0, priorHistory = '' } = {}) {
+  const ctx = getContext();
+  const chat = ctx?.chat;
+  if (!Array.isArray(chat) || chat.length === 0) {
+    set_summary_initialized(true);
+    return;
+  }
+
+  const chatLength = chat.length;
+  let targetCount = mode === 'all' ? chatLength : Math.max(1, Math.min(count, chatLength));
+  let compactStart = Math.max(0, chatLength - targetCount);
+
+  // Summarize selected range [compactStart .. chatLength - 1]
+  const unsummarized = [];
+  for (let i = compactStart; i < chatLength; i++) {
+    if (chat[i] && check_message_exclusion(chat[i]) && !get_memory(chat[i])) {
+      unsummarized.push(i);
+    }
+  }
+
+  if (unsummarized.length > 0) {
+    if (summaryQueue && typeof summaryQueue.add_extra_total === 'function') {
+      summaryQueue.add_extra_total(unsummarized.length, "Initial Chat Summarization...");
+    }
+    for (let idx of unsummarized) {
+      const prompt = create_summary_prompt(idx);
+      if (prompt && prompt.length > 0) {
+        const res = await summarize_text(prompt);
+        if (res) {
+          set_data(chat[idx], 'memory', res);
+          set_data(chat[idx], 'hash', compute_hash(res));
+        }
+      }
+      if (summaryQueue && typeof summaryQueue.step_progress === 'function') {
+        summaryQueue.step_progress("Initial Chat Summarization...");
+      }
+    }
+  }
+
+  // Prior history handling
+  const cleanPrior = (priorHistory || '').trim();
+  let historyToStamp = cleanPrior;
+
+  if (!historyToStamp && compactStart < chatLength) {
+    historyToStamp = get_memory(chat[compactStart]) || '';
+  }
+
+  if (historyToStamp && compactStart > 0) {
+    update_long_term_history_range(0, compactStart - 1, historyToStamp);
+  }
+
+  set_summary_initialized(true);
+  saveChatDebounced();
 }

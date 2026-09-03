@@ -5,12 +5,13 @@ import { getStringHash } from '../../../utils.js';
 import { t } from '../../../i18n.js';
 import { PROGRESS_BAR_ID } from './constants.js';
 import { debug, toast, saveChatDebounced } from './utils.js';
-import { get_settings, chat_enabled, get_active_connection_profile, auto_load_profile, notify_ui_refresh } from './state.js';
+import { get_settings, chat_enabled, get_active_connection_profile, auto_load_profile, notify_ui_refresh, get_summary_initialized } from './state.js';
 import { set_data, get_memory, check_message_exclusion, refresh_memory, fillup, INJECTION_THRESHOLD_INDEX, set_injection_threshold_index, get_injection_threshold_index } from './memory.js';
 import { create_summary_prompt } from './macros.js';
+import { ensure_summary_initialized } from './ui.js';
 
 // Visual update callback hooks to prevent tight UI coupling
-let _message_visuals_callback = null;
+var _message_visuals_callback = null;
 export function set_message_visuals_callback(fn) {
   _message_visuals_callback = fn;
 }
@@ -21,7 +22,7 @@ export function update_message_visuals(index, in_progress = false, custom_text =
   }
 }
 
-let _all_message_visuals_callback = null;
+var _all_message_visuals_callback = null;
 export function set_all_visuals_callback(fn) {
   _all_message_visuals_callback = fn;
 }
@@ -388,10 +389,12 @@ export async function auto_summarize_chat() {
   const chat = ctx?.chat;
   if (!Array.isArray(chat) || chat.length === 0) return;
 
-  const limit = Number(get_settings('auto_summarize_message_limit'));
-  const start = limit > 0 ? Math.max(0, chat.length - limit) : 0;
+  if (!get_summary_initialized()) {
+    const ok = await ensure_summary_initialized();
+    if (!ok) return;
+  }
 
-  for (let i = start; i < chat.length; i++) {
+  for (let i = 0; i < chat.length; i++) {
     const msg = chat[i];
     if (!msg) continue;
     const has_mem = get_memory(msg);

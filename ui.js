@@ -49,6 +49,9 @@ import {
   set_settings,
   chat_enabled,
   toggle_chat_enabled,
+  is_chat_loaded,
+  get_summary_initialized,
+  set_summary_initialized,
   load_profile,
   save_profile,
   export_profile,
@@ -67,6 +70,7 @@ import {
   get_data,
   set_data,
   get_memory,
+  initialize_chat_summarization,
   get_chat_long_term_memory,
   set_chat_long_term_memory,
   get_last_long_term_history_block,
@@ -358,6 +362,9 @@ export function initialize_settings_ui() {
     toast("Summarization stopped.", "warning");
   });
   $(`.${settings_content_class} #summarize_all_messages`).on('click', async () => {
+    if (!is_chat_loaded()) return;
+    const ok = await ensure_summary_initialized();
+    if (!ok) return;
     const ctx = getContext();
     const chat = ctx?.chat || [];
     for (let i = 0; i < chat.length; i++) {
@@ -1674,4 +1681,121 @@ export function init_interfaces() {
     ]
   });
   memoryEditInterface = new MemoryEditInterface();
+}
+
+export class SummaryInitModal {
+  constructor() {
+    this.ctx = getContext();
+  }
+
+  show() {
+    return new Promise((resolve) => {
+      if (!this.ctx?.Popup) {
+        resolve(false);
+        return;
+      }
+
+      const chat = this.ctx.chat;
+      if (!Array.isArray(chat) || chat.length === 0) {
+        resolve(false);
+        return;
+      }
+
+      const chatLength = chat.length;
+
+      const template = `
+<div id="memnext_summary_init_modal" class="flex-container flex-direction-column gap-10" style="padding: 10px;">
+    <h3>First-Time Chat Summarization Setup</h3>
+    
+    <div class="flex-container flex-direction-column gap-5">
+        <label><b>Summarize:</b></label>
+        <div class="flex-container alignitemscenter gap-15">
+            <label style="cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                <input type="radio" name="memnext_init_mode" value="all" checked> All messages (${chatLength})
+            </label>
+            <label style="cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                <input type="radio" name="memnext_init_mode" value="last_n"> Last N messages
+            </label>
+            <input type="number" id="memnext_init_n_count" class="text_pole" style="width: 80px;" min="1" max="${chatLength}" value="${chatLength}">
+        </div>
+    </div>
+
+    <div class="flex-container flex-direction-column gap-5 margin-top-5">
+        <label><b>(Optional) Write a story of what happened prior to current events</b></label>
+        <textarea id="memnext_init_prior_history" class="text_pole" style="width: 100%; min-height: 120px; font-family: monospace; resize: vertical;" placeholder="Type optional background narrative..."></textarea>
+        <div style="font-size: 0.85em; opacity: 0.8; text-align: right;">
+            <span id="memnext_init_prior_tokens">0</span> tokens
+        </div>
+    </div>
+
+    <div class="flex-container justifyspacebetween alignitemscenter margin-top-10">
+        <button id="memnext_init_cancel_btn" class="menu_button red_button"><i class="fa-solid fa-xmark"></i> Cancel</button>
+        <button id="memnext_init_ok_btn" class="menu_button" style="color: #28a745;"><i class="fa-solid fa-check"></i> OK</button>
+    </div>
+</div>
+`;
+
+      const popup = new this.ctx.Popup(template, this.ctx.POPUP_TYPE.TEXT, '', {
+        wider: true
+      });
+
+      const $content = $(popup.content);
+
+      const $textarea = $content.find('#memnext_init_prior_history');
+      const $tokenCountDisplay = $content.find('#memnext_init_prior_tokens');
+
+      $textarea.on('input', () => {
+        const text = $textarea.val() || '';
+        $tokenCountDisplay.text(count_tokens(text));
+      });
+
+      $content.find('#memnext_init_cancel_btn').on('click', () => {
+        if (popup && typeof popup.complete === 'function') popup.complete();
+        else if (popup && typeof popup.close === 'function') popup.close();
+
+        resolve(false);
+      });
+
+      $content.find('#memnext_init_ok_btn').on('click', async () => {
+        const mode = $content.find('input[name="memnext_init_mode"]:checked').val() || 'all';
+        const count = parseInt($content.find('#memnext_init_n_count').val(), 10) || chatLength;
+        const priorHistory = $textarea.val() || '';
+
+        if (popup && typeof popup.complete === 'function') popup.complete();
+        else if (popup && typeof popup.close === 'function') popup.close();
+
+        await initialize_chat_summarization({ mode, count, priorHistory });
+        resolve(true);
+      });
+    });
+  }
+}
+
+
+export function update_chat_buttons_state() {
+  const hasChat = is_chat_loaded();
+  const $editBtn = $('#edit_memory_state');
+  const $sumAllBtn = $('#summarize_all_messages');
+  const $toggleBtn = $('#toggle_chat_memory');
+  const $refreshBtn = $('#refresh_memory');
+
+  if (!hasChat) {
+    $editBtn.prop('disabled', true).css({ opacity: 0.5, cursor: 'not-allowed' }).attr('title', 'No active chat loaded.');
+    $sumAllBtn.prop('disabled', true).css({ opacity: 0.5, cursor: 'not-allowed' }).attr('title', 'No active chat loaded.');
+    $toggleBtn.prop('disabled', true).css({ opacity: 0.5, cursor: 'not-allowed' }).attr('title', 'No active chat loaded.');
+    $refreshBtn.prop('disabled', true).css({ opacity: 0.5, cursor: 'not-allowed' }).attr('title', 'No active chat loaded.');
+  } else {
+    $editBtn.prop('disabled', false).css({ opacity: 1, cursor: 'pointer' }).attr('title', 'Edit the memories in chat.');
+    $sumAllBtn.prop('disabled', false).css({ opacity: 1, cursor: 'pointer' }).attr('title', 'Summarize all unsummarized messages in the current chat from beginning to end.');
+    $toggleBtn.prop('disabled', false).css({ opacity: 1, cursor: 'pointer' }).attr('title', 'Toggle whether memory is enabled for this chat specifically.');
+    $refreshBtn.prop('disabled', false).css({ opacity: 1, cursor: 'pointer' }).attr('title', 'Refreshes inclusion flags and re-renders memory display.');
+  }
+}
+
+
+export async function ensure_summary_initialized() {
+  if (get_summary_initialized()) return true;
+  if (!chat_enabled()) return true;
+  const modal = new SummaryInitModal();
+  return await modal.show();
 }
