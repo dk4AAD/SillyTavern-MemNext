@@ -1736,9 +1736,15 @@ export class SummaryInitModal {
 </div>
 `;
 
-      const popup = new this.ctx.Popup(template, this.ctx.POPUP_TYPE.TEXT, '', {
-        wider: true
+      const PopupClass = this.ctx.Popup;
+      const popupType = this.ctx.POPUP_TYPE?.TEXT ?? 'text';
+      const popup = new PopupClass(template, popupType, '', {
+        wider: true,
+        okButton: false,
+        cancelButton: false
       });
+
+      popup.show();
 
       const $content = $(popup.content);
 
