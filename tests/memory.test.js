@@ -306,3 +306,29 @@ test('memory.js: get_long_term_cutoff_index returns the first long-term message 
   update_long_term_history_range(5, 8, 'Newer long term');
   assert.equal(get_long_term_cutoff_index(), 8);
 });
+
+
+test('memory.js: get_last_long_term_history_block and get_long_term_cutoff_index fallback to chat_metadata', () => {
+  mockChat.length = 0;
+  for (let i = 0; i < 10; i++) {
+    mockChat.push({ mes: `Msg ${i}` });
+  }
+
+  // Set chat_metadata long_term_memory without stamping individual messages
+  set_chat_long_term_memory('Consolidated story so far...');
+  set_injection_threshold_index(4);
+
+  const cutoff = get_long_term_cutoff_index();
+  assert.equal(cutoff, 4, 'Cutoff index should fallback to iti when chat_metadata has long term memory');
+
+  const block = get_last_long_term_history_block();
+  assert.ok(block !== null, 'Block must not be null');
+  assert.equal(block.startIndex, 0);
+  assert.equal(block.endIndex, 4);
+  assert.equal(block.text, 'Consolidated story so far...');
+
+  // Deleting long term memory clears chat_metadata and resets cutoff to -1
+  delete_long_term_history_range(0, 4);
+  assert.equal(get_long_term_cutoff_index(), -1);
+  assert.equal(get_last_long_term_history_block(), null);
+});

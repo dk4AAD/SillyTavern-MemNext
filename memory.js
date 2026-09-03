@@ -521,7 +521,24 @@ export function get_last_long_term_history_block() {
     lastBlock = currentBlock;
   }
 
-  return lastBlock;
+  if (lastBlock) {
+    return lastBlock;
+  }
+
+  // Fallback: check chat_metadata long_term_memory
+  const chatLong = get_chat_long_term_memory();
+  if (chatLong && typeof chatLong === 'string' && chatLong.trim().length > 0) {
+    const iti = get_injection_threshold_index();
+    const endIndex = (iti !== null && iti !== undefined && iti >= 0) ? Math.min(iti, chat.length - 1) : Math.max(0, chat.length - 1);
+    return {
+      startIndex: 0,
+      endIndex: endIndex,
+      hash: compute_hash(chatLong.trim()),
+      text: chatLong.trim()
+    };
+  }
+
+  return null;
 }
 
 export function update_long_term_history_range(startIndex, endIndex, text) {
@@ -539,13 +556,30 @@ export function update_long_term_history_range(startIndex, endIndex, text) {
       set_data(chat[i], 'include', cleanText ? 'long' : null);
     }
   }
-  set_chat_long_term_memory(cleanText);
+  
+  let msgBlockText = null;
+  for (let i = 0; i < chat.length; i++) {
+    const txt = chat[i] && get_data(chat[i], 'long_term_history');
+    if (txt && typeof txt === 'string' && txt.trim().length > 0) {
+      msgBlockText = txt.trim();
+      break;
+    }
+  }
+
+  if (msgBlockText) {
+    set_chat_long_term_memory(msgBlockText);
+  } else if (!cleanText) {
+    set_chat_long_term_memory("");
+  } else {
+    set_chat_long_term_memory(cleanText);
+  }
   saveChatDebounced();
 }
 
 export function delete_long_term_history_range(startIndex, endIndex) {
   update_long_term_history_range(startIndex, endIndex, null);
-  if (get_long_term_cutoff_index() === -1) {
+  const remainingBlock = get_last_long_term_history_block();
+  if (!remainingBlock) {
     set_chat_long_term_memory("");
     set_injection_threshold_index(null);
     if (chat_metadata?.memnext) {
@@ -568,5 +602,15 @@ export function get_long_term_cutoff_index() {
       return i;
     }
   }
+
+  // Fallback: if chat_metadata long_term_memory exists
+  const chatLong = get_chat_long_term_memory();
+  if (chatLong && typeof chatLong === 'string' && chatLong.trim().length > 0) {
+    const iti = get_injection_threshold_index();
+    if (iti !== null && iti !== undefined && iti >= 0) {
+      return iti;
+    }
+  }
+
   return -1;
 }
