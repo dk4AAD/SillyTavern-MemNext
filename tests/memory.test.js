@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { compute_hash } from '../utils.js';
 import {
+  get_last_long_term_history_block,
+  update_long_term_history_range,
+  delete_long_term_history_range,
   get_data,
   set_data,
   get_memory,
@@ -240,4 +243,46 @@ test('memory.js: compact_history multi-message stamping', async () => {
   assert.equal(get_long_term_hash(mockChat[0]), null);
   assert.equal(get_data(mockChat[5], 'long_term_history'), null);
   assert.equal(get_long_term_hash(mockChat[5]), null);
+});
+
+
+test('memory.js: get_last_long_term_history_block finds the last consolidated entry and range', () => {
+  mockChat.length = 0;
+  for (let i = 0; i < 10; i++) {
+    mockChat.push({ mes: `Msg ${i}` });
+  }
+
+  // Block 1: messages 1..3 with Hash A
+  update_long_term_history_range(1, 3, 'Chapter 1: The Gathering');
+  // Block 2: messages 5..7 with Hash B
+  update_long_term_history_range(5, 7, 'Chapter 2: The Journey');
+
+  const block = get_last_long_term_history_block();
+  assert.ok(block !== null, 'Block must be found');
+  assert.equal(block.startIndex, 5);
+  assert.equal(block.endIndex, 7);
+  assert.equal(block.text, 'Chapter 2: The Journey');
+  assert.equal(block.hash, compute_hash('Chapter 2: The Journey'));
+
+  // Edit history across the range
+  const editedText = 'Chapter 2: The Extended Journey to the Castle';
+  update_long_term_history_range(5, 7, editedText);
+
+  const updatedBlock = get_last_long_term_history_block();
+  assert.equal(updatedBlock.text, editedText);
+  assert.equal(updatedBlock.hash, compute_hash(editedText));
+  assert.equal(get_data(mockChat[5], 'long_term_history'), editedText);
+  assert.equal(get_data(mockChat[6], 'long_term_history'), editedText);
+  assert.equal(get_data(mockChat[7], 'long_term_history'), editedText);
+
+  // Delete history across the range
+  delete_long_term_history_range(5, 7);
+  assert.equal(get_data(mockChat[5], 'long_term_history'), null);
+  assert.equal(get_data(mockChat[7], 'long_term_history'), null);
+
+  // Now the last remaining block is Block 1 (messages 1..3)
+  const remainingBlock = get_last_long_term_history_block();
+  assert.equal(remainingBlock.startIndex, 1);
+  assert.equal(remainingBlock.endIndex, 3);
+  assert.equal(remainingBlock.text, 'Chapter 1: The Gathering');
 });

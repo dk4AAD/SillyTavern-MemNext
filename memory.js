@@ -477,3 +477,68 @@ export async function compact_history(compact_start, history_calc_message, old_h
   saveChatDebounced();
   return final_long;
 }
+
+export function get_last_long_term_history_block() {
+  const ctx = getContext();
+  const chat = ctx?.chat;
+  if (!Array.isArray(chat) || chat.length === 0) return null;
+
+  let lastBlock = null;
+  let currentBlock = null;
+
+  for (let i = 0; i < chat.length; i++) {
+    const msg = chat[i];
+    if (!msg) continue;
+    const historyText = get_data(msg, 'long_term_history');
+    if (!historyText) {
+      if (currentBlock) {
+        lastBlock = currentBlock;
+        currentBlock = null;
+      }
+      continue;
+    }
+
+    const hash = get_long_term_hash(msg) || compute_hash(historyText);
+
+    if (!currentBlock || currentBlock.hash !== hash) {
+      if (currentBlock) {
+        lastBlock = currentBlock;
+      }
+      currentBlock = {
+        startIndex: i,
+        endIndex: i,
+        hash: hash,
+        text: historyText
+      };
+    } else {
+      currentBlock.endIndex = i;
+    }
+  }
+
+  if (currentBlock) {
+    lastBlock = currentBlock;
+  }
+
+  return lastBlock;
+}
+
+export function update_long_term_history_range(startIndex, endIndex, text) {
+  const ctx = getContext();
+  const chat = ctx?.chat;
+  if (!Array.isArray(chat) || chat.length === 0) return;
+
+  const cleanText = (text || '').trim();
+  const hash = cleanText ? compute_hash(cleanText) : null;
+
+  for (let i = startIndex; i <= endIndex; i++) {
+    if (chat[i]) {
+      set_data(chat[i], 'long_term_history', cleanText || null);
+      set_data(chat[i], 'long_term_hash', hash);
+    }
+  }
+  saveChatDebounced();
+}
+
+export function delete_long_term_history_range(startIndex, endIndex) {
+  update_long_term_history_range(startIndex, endIndex, null);
+}

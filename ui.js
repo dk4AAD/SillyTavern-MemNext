@@ -68,6 +68,9 @@ import {
   get_memory,
   get_chat_long_term_memory,
   set_chat_long_term_memory,
+  get_last_long_term_history_block,
+  update_long_term_history_range,
+  delete_long_term_history_range,
   check_message_exclusion,
   refresh_memory,
   set_budget_refresh_callback,
@@ -760,12 +763,66 @@ export class MemoryEditInterface {
     $tabBtnLong.on('click', () => switchTab('long_term'));
 
     const populateLongTerm = () => {
-      const longMem = get_chat_long_term_memory();
-      if (longMem && longMem.trim().length > 0) {
-        $ltContainer.html(`<div style="padding: 12px; white-space: pre-wrap; font-family: monospace; background: var(--SmartThemeBlurTintColor); border: 1px solid var(--SmartThemeBorderColor); border-radius: 5px; flex: 1; overflow-y: auto;">${escape_string(longMem)}</div>`);
-      } else {
-        $ltContainer.html(`<div id="long_term_placeholder" style="opacity: 0.8; font-style: italic; padding: 12px;">No long-term memory consolidated yet.</div>`);
+      const block = get_last_long_term_history_block();
+      if (!block) {
+        $ltContainer.html(`
+          <div id="long_term_placeholder" style="opacity: 0.8; font-style: italic; padding: 12px;">
+              No long-term memory consolidated yet.
+          </div>
+        `);
+        return;
       }
+
+      const tokenCount = count_tokens(block.text);
+
+      $ltContainer.html(`
+        <div class="long_term_view_block" style="display: flex; flex-direction: column; flex: 1; gap: 10px; padding: 5px;">
+            <div class="flex-container justifyspacebetween alignitemscenter" style="font-size: 0.9em; opacity: 0.9;">
+                <span>Covering messages <b>#${block.startIndex}</b> to <b>#${block.endIndex}</b> (${tokenCount} tokens)</span>
+                <span>Hash: <code style="font-family: monospace; font-size: 0.9em;">${block.hash}</code></span>
+            </div>
+            <div class="long_term_content_area" style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
+                <div class="long_term_display_text" style="padding: 12px; white-space: pre-wrap; font-family: monospace; background: var(--SmartThemeBlurTintColor); border: 1px solid var(--SmartThemeBorderColor); border-radius: 5px; flex: 1; overflow-y: auto;">${escape_string(block.text)}</div>
+            </div>
+            <div class="flex-container alignitemscenter" style="gap: 10px; margin-top: 5px;">
+                <button class="menu_button lt_edit_btn"><i class="fa-solid fa-pencil"></i> Edit History</button>
+                <button class="menu_button lt_delete_btn red_button"><i class="fa-solid fa-trash"></i> Delete History</button>
+            </div>
+        </div>
+      `);
+
+      $ltContainer.find('.lt_delete_btn').on('click', () => {
+        delete_long_term_history_range(block.startIndex, block.endIndex);
+        update_all_message_visuals();
+        populateLongTerm();
+      });
+
+      $ltContainer.find('.lt_edit_btn').on('click', () => {
+        const $contentArea = $ltContainer.find('.long_term_content_area');
+        $contentArea.html(`
+          <textarea class="text_pole lt_edit_textarea" style="width: 100%; flex: 1; min-height: 150px; font-family: monospace; resize: vertical; box-sizing: border-box;"></textarea>
+          <div class="flex-container alignitemscenter" style="gap: 8px; margin-top: 5px;">
+              <button class="menu_button lt_save_btn" style="color: #28a745;"><i class="fa-solid fa-check"></i> Save</button>
+              <button class="menu_button lt_cancel_btn red_button"><i class="fa-solid fa-xmark"></i> Cancel</button>
+          </div>
+        `);
+
+        const $textarea = $contentArea.find('.lt_edit_textarea');
+        $textarea.val(block.text).focus();
+
+        $contentArea.find('.lt_save_btn').on('click', () => {
+          const newText = $textarea.val().trim();
+          if (newText !== block.text) {
+            update_long_term_history_range(block.startIndex, block.endIndex, newText);
+            update_all_message_visuals();
+          }
+          populateLongTerm();
+        });
+
+        $contentArea.find('.lt_cancel_btn').on('click', () => {
+          populateLongTerm();
+        });
+      });
     };
 
     const $tbody = $content.find('tbody');
