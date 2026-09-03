@@ -472,8 +472,10 @@ export async function compact_history(compact_start, history_calc_message, old_h
     if (chat[i]) {
       set_data(chat[i], 'long_term_history', final_long);
       set_data(chat[i], 'long_term_hash', long_hash);
+      set_data(chat[i], 'include', 'long');
     }
   }
+  set_chat_long_term_memory(final_long);
   saveChatDebounced();
   return final_long;
 }
@@ -534,14 +536,17 @@ export function update_long_term_history_range(startIndex, endIndex, text) {
     if (chat[i]) {
       set_data(chat[i], 'long_term_history', cleanText || null);
       set_data(chat[i], 'long_term_hash', hash);
+      set_data(chat[i], 'include', cleanText ? 'long' : null);
     }
   }
+  set_chat_long_term_memory(cleanText);
   saveChatDebounced();
 }
 
 export function delete_long_term_history_range(startIndex, endIndex) {
   update_long_term_history_range(startIndex, endIndex, null);
   if (get_long_term_cutoff_index() === -1) {
+    set_chat_long_term_memory("");
     set_injection_threshold_index(null);
     if (chat_metadata?.memnext) {
       chat_metadata.memnext.iti = null;

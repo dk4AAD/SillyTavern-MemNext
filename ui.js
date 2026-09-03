@@ -199,14 +199,15 @@ export function update_message_visuals(i, in_progress = false, custom_text = nul
   const message = ctx?.chat?.[i];
   if (!message) return;
 
-  const memory_text = custom_text || get_memory(message);
+  const long_history = get_data(message, 'long_term_history');
+  const memory_text = custom_text || get_memory(message) || long_history;
   if (!memory_text) return;
 
-  const include = get_data(message, 'include');
+  const include = get_data(message, 'include') || (long_history ? 'long' : 'short');
   const iti = get_injection_threshold_index();
   const lagging = iti === null || iti === undefined ? true : (i > iti);
 
-  // Default to short memory (fancy green styling)
+  // Default to short memory, use long memory styling when part of long-term history
   let style_class = css_short_memory;
   if (include === 'long') {
     style_class = css_long_memory;
