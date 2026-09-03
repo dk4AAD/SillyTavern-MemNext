@@ -485,11 +485,7 @@ export function get_summary_connection_profile() {
 export function is_chat_loaded() {
   const ctx = getContext();
   if (!ctx) return false;
-
-  const hasCharOrGroup = Boolean(ctx.groupId || (ctx.characterId !== undefined && ctx.characterId !== null));
-  const hasChatArray = Array.isArray(ctx.chat) && ctx.chat.length > 0;
-
-  return hasCharOrGroup && hasChatArray;
+  return Boolean(ctx.groupId || (ctx.characterId !== undefined && ctx.characterId !== null));
 }
 
 export function get_summary_initialized() {
