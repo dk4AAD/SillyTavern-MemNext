@@ -455,7 +455,7 @@ export async function compact_history(compact_start, history_calc_message, old_h
   }
 
   if (summaryQueue && typeof summaryQueue.finish_compaction_progress === 'function') {
-    summaryQueue.finish_compaction_progress();
+    await summaryQueue.finish_compaction_progress();
   }
 
   const long_hash = compute_hash(final_long);

@@ -130,8 +130,9 @@ export class SummaryQueue {
     show_progress_bar('summarize', completed, total, title);
   }
 
-  hide_progress() {
+  async hide_progress() {
     hide_progress_bar('summarize');
+    await new Promise(r => setTimeout(r, 20));
   }
 
   add_extra_total(count, title = "Compacting memory...") {
@@ -148,12 +149,10 @@ export class SummaryQueue {
     }
   }
 
-  finish_compaction_progress() {
-    if (this.completed_tasks >= this.total_tasks && !this.queue_running) {
-      this.hide_progress();
-      this.total_tasks = 0;
-      this.completed_tasks = 0;
-    }
+  async finish_compaction_progress() {
+    await this.hide_progress();
+    this.total_tasks = 0;
+    this.completed_tasks = 0;
   }
 
   async run() {
@@ -178,17 +177,19 @@ export class SummaryQueue {
     await Promise.all(workers);
     this.queue_running = false;
 
+    // Hide message summarization progress bar and yield repaint tick before fillup/compaction
+    await this.hide_progress();
+    this.total_tasks = 0;
+    this.completed_tasks = 0;
+
     // Run full fillup process using the newly generated summaries.
-    // If compaction triggers, compact_history extends the counter and continues showing progress.
+    // If compaction triggers, compact_history shows and hides its own progress bar.
     await refresh_memory();
 
     if (get_settings('block_chat') && ctx && typeof ctx.activateSendButtons === 'function') {
       ctx.activateSendButtons();
     }
 
-    this.hide_progress();
-    this.total_tasks = 0;
-    this.completed_tasks = 0;
     saveChatDebounced();
   }
 
@@ -453,7 +454,6 @@ export async function on_chat_event(event, data = null) {
         update_message_visuals(Number(data));
       }
       await auto_summarize_chat();
-      await refresh_memory();
       break;
     case 'char_message':
       if (data !== null && data !== undefined) {
@@ -465,15 +465,15 @@ export async function on_chat_event(event, data = null) {
           summaryQueue.add(Number(data));
           setTimeout(async () => {
             await summaryQueue.run();
-          }, 0);
+          }, 50);
         }
       } else {
         last_char_message_index = data !== null && data !== undefined ? Number(data) : null;
-        // Defer auto-summarization to the next tick so SillyTavern finishes rendering
+        // Defer auto-summarization so SillyTavern finishes rendering
         // and the browser immediately paints/prints the message in chat.
         setTimeout(async () => {
           await auto_summarize_chat();
-        }, 0);
+        }, 50);
       }
       break;
     case 'message_edited':
