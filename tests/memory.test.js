@@ -35,10 +35,12 @@ test('memory.js: get_data and set_data manage message extra properties', () => {
   assert.equal(get_data(msg, 'non_existent'), null);
 });
 
-test('memory.js: get_chat_long_term_memory and set_chat_long_term_memory', () => {
-  set_chat_long_term_memory('Long term adventure began.');
+test('memory.js: get_chat_long_term_memory retrieves text from per-message block', () => {
+  mockChat.length = 0;
+  mockChat.push({ mes: 'Msg 0' });
+  mockChat.push({ mes: 'Msg 1' });
+  update_long_term_history_range(0, 1, 'Long term adventure began.');
   assert.equal(get_chat_long_term_memory(), 'Long term adventure began.');
-  assert.equal(chat_metadata.memnext.long_term_memory, 'Long term adventure began.');
 });
 
 test('memory.js: check_message_exclusion filters messages based on configuration', () => {
@@ -308,26 +310,27 @@ test('memory.js: get_long_term_cutoff_index returns the first long-term message 
 });
 
 
-test('memory.js: get_last_long_term_history_block and get_long_term_cutoff_index fallback to chat_metadata', () => {
+test('memory.js: strict per-message long_term_history management', () => {
   mockChat.length = 0;
   for (let i = 0; i < 10; i++) {
     mockChat.push({ mes: `Msg ${i}` });
   }
 
-  // Set chat_metadata long_term_memory without stamping individual messages
-  set_chat_long_term_memory('Consolidated story so far...');
-  set_injection_threshold_index(4);
+  // Without per-message stamping, cutoff index is -1 and block is null
+  assert.equal(get_long_term_cutoff_index(), -1);
+  assert.equal(get_last_long_term_history_block(), null);
 
-  const cutoff = get_long_term_cutoff_index();
-  assert.equal(cutoff, 4, 'Cutoff index should fallback to iti when chat_metadata has long term memory');
+  // Stamping per-message long term history on range 0..4
+  update_long_term_history_range(0, 4, 'Strict per-message story so far...');
+  assert.equal(get_long_term_cutoff_index(), 4);
 
   const block = get_last_long_term_history_block();
-  assert.ok(block !== null, 'Block must not be null');
+  assert.ok(block !== null);
   assert.equal(block.startIndex, 0);
   assert.equal(block.endIndex, 4);
-  assert.equal(block.text, 'Consolidated story so far...');
+  assert.equal(block.text, 'Strict per-message story so far...');
 
-  // Deleting long term memory clears chat_metadata and resets cutoff to -1
+  // Deleting range resets cutoff to -1 when no other long-term blocks exist
   delete_long_term_history_range(0, 4);
   assert.equal(get_long_term_cutoff_index(), -1);
   assert.equal(get_last_long_term_history_block(), null);

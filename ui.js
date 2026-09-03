@@ -375,7 +375,7 @@ export function initialize_settings_ui() {
     toast("Full chat summarization and memory update complete.", "success");
   });
   $(`.${settings_content_class} #clear_long_term_memory`).on('click', () => {
-    set_chat_long_term_memory("");
+    if (Array.isArray(chat) && chat.length > 0) { delete_long_term_history_range(0, chat.length - 1); }
     refresh_memory();
     toast("Long-term memory cleared for this chat.", "info");
   });

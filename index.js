@@ -89,7 +89,7 @@ export function initialize_slash_commands() {
   SlashCommandParser.addCommandObject(SlashCommand.fromProps({
     name: 'memnext-clear-long',
     callback: () => {
-      set_chat_long_term_memory('');
+      const ctx = getContext(); if (Array.isArray(ctx?.chat) && ctx.chat.length > 0) { delete_long_term_history_range(0, ctx.chat.length - 1); }
       refresh_memory();
       return 'Long-term consolidated memory cleared.';
     },
@@ -142,7 +142,7 @@ if (typeof jQuery !== 'undefined') {
 
         MacrosParser.registerMacro(long_memory_macro, () => {
           const ctx = getContext();
-          return ctx?.chat_metadata?.memnext?.long_injection || get_chat_long_term_memory() || "";
+          const block = get_last_long_term_history_block(); return ctx?.chat_metadata?.memnext?.long_injection || block?.text || "";
         }, 'MemNext Long-Term Memory');
       }
 

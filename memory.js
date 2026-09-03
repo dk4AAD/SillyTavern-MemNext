@@ -62,21 +62,12 @@ export function set_long_term_hash(message, hash) {
 }
 
 export function get_chat_long_term_memory() {
-  if (!chat_metadata || typeof chat_metadata !== 'object') return '';
-  const memData = chat_metadata[MODULE_NAME];
-  if (!memData || typeof memData !== 'object') return '';
-  return typeof memData.long_term_memory === 'string' ? memData.long_term_memory : '';
+  const block = get_last_long_term_history_block();
+  return block ? block.text : '';
 }
 
 export function set_chat_long_term_memory(text) {
-  if (!chat_metadata || typeof chat_metadata !== 'object') return;
-  if (!chat_metadata[MODULE_NAME] || typeof chat_metadata[MODULE_NAME] !== 'object') {
-    chat_metadata[MODULE_NAME] = {};
-  }
-  chat_metadata[MODULE_NAME].long_term_memory = String(text ?? '');
-  if (typeof saveMetadataDebounced === 'function') {
-    saveMetadataDebounced();
-  }
+  // Legacy stub: long-term history is managed strictly on per-message level
 }
 
 // Exclusion checking
@@ -475,7 +466,6 @@ export async function compact_history(compact_start, history_calc_message, old_h
       set_data(chat[i], 'include', 'long');
     }
   }
-  set_chat_long_term_memory(final_long);
   saveChatDebounced();
   return final_long;
 }
@@ -521,24 +511,7 @@ export function get_last_long_term_history_block() {
     lastBlock = currentBlock;
   }
 
-  if (lastBlock) {
-    return lastBlock;
-  }
-
-  // Fallback: check chat_metadata long_term_memory
-  const chatLong = get_chat_long_term_memory();
-  if (chatLong && typeof chatLong === 'string' && chatLong.trim().length > 0) {
-    const iti = get_injection_threshold_index();
-    const endIndex = (iti !== null && iti !== undefined && iti >= 0) ? Math.min(iti, chat.length - 1) : Math.max(0, chat.length - 1);
-    return {
-      startIndex: 0,
-      endIndex: endIndex,
-      hash: compute_hash(chatLong.trim()),
-      text: chatLong.trim()
-    };
-  }
-
-  return null;
+  return lastBlock;
 }
 
 export function update_long_term_history_range(startIndex, endIndex, text) {
@@ -556,31 +529,12 @@ export function update_long_term_history_range(startIndex, endIndex, text) {
       set_data(chat[i], 'include', cleanText ? 'long' : null);
     }
   }
-  
-  let msgBlockText = null;
-  for (let i = 0; i < chat.length; i++) {
-    const txt = chat[i] && get_data(chat[i], 'long_term_history');
-    if (txt && typeof txt === 'string' && txt.trim().length > 0) {
-      msgBlockText = txt.trim();
-      break;
-    }
-  }
-
-  if (msgBlockText) {
-    set_chat_long_term_memory(msgBlockText);
-  } else if (!cleanText) {
-    set_chat_long_term_memory("");
-  } else {
-    set_chat_long_term_memory(cleanText);
-  }
   saveChatDebounced();
 }
 
 export function delete_long_term_history_range(startIndex, endIndex) {
   update_long_term_history_range(startIndex, endIndex, null);
-  const remainingBlock = get_last_long_term_history_block();
-  if (!remainingBlock) {
-    set_chat_long_term_memory("");
+  if (get_long_term_cutoff_index() === -1) {
     set_injection_threshold_index(null);
     if (chat_metadata?.memnext) {
       chat_metadata.memnext.iti = null;
@@ -600,15 +554,6 @@ export function get_long_term_cutoff_index() {
     const text = get_data(chat[i], 'long_term_history');
     if (chat[i] && text && typeof text === 'string' && text.trim().length > 0) {
       return i;
-    }
-  }
-
-  // Fallback: if chat_metadata long_term_memory exists
-  const chatLong = get_chat_long_term_memory();
-  if (chatLong && typeof chatLong === 'string' && chatLong.trim().length > 0) {
-    const iti = get_injection_threshold_index();
-    if (iti !== null && iti !== undefined && iti >= 0) {
-      return iti;
     }
   }
 
