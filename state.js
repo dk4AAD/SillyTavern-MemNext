@@ -486,21 +486,10 @@ export function is_chat_loaded() {
   const ctx = getContext();
   if (!ctx) return false;
 
-  if (ctx.groupId !== undefined && ctx.groupId !== null && ctx.groupId !== '') {
-    return Array.isArray(ctx.chat) && ctx.chat.length > 0;
-  }
+  const hasCharOrGroup = Boolean(ctx.groupId || (ctx.characterId !== undefined && ctx.characterId !== null));
+  const hasChatArray = Array.isArray(ctx.chat) && ctx.chat.length > 0;
 
-  const charId = ctx.characterId;
-  if (charId === undefined || charId === null || charId === '') return false;
-
-  const char = ctx.characters?.[charId];
-  if (!char) return false;
-
-  if (!char.name || (char.name === 'Assistant' && !char.avatar) || !char.chat) {
-    return false;
-  }
-
-  return Array.isArray(ctx.chat) && ctx.chat.length > 0;
+  return hasCharOrGroup && hasChatArray;
 }
 
 export function get_summary_initialized() {
