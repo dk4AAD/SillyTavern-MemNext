@@ -13,6 +13,7 @@ import {
 } from './constants.js';
 import { log, error, get_current_character_identifier } from './utils.js';
 import { refresh_memory } from './memory.js';
+import { update_chat_buttons_section } from './ui.js';
 
 export const default_settings = {
   // Plugin master toggle per profile
@@ -266,6 +267,10 @@ export function update_profile_section() {
     $chat.removeClass(highlight_class);
     $chat_icon.removeClass(lock_class).addClass(unlock_class);
   }
+
+  if (typeof update_chat_buttons_section === 'function') {
+    update_chat_buttons_section();
+  }
 }
 
 export function save_profile(profile = null, silent = false) {
@@ -484,9 +489,7 @@ export function get_summary_connection_profile() {
 
 
 export function is_chat_loaded() {
-  const ctx = getContext();
-  if (!ctx) return false;
-  return Boolean(ctx.groupId || (ctx.characterId !== undefined && ctx.characterId !== null));
+  return Boolean(get_current_character_identifier());
 }
 
 export function get_summary_initialized() {

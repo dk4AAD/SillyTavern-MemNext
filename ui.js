@@ -1773,13 +1773,14 @@ export class SummaryInitModal {
 }
 
 
-export function update_chat_buttons_state() {
+export function update_chat_buttons_section() {
   if (typeof $ === 'undefined') return;
   const hasChat = is_chat_loaded();
-  const $editBtn = $(`.${settings_content_class} #edit_memory_state, #edit_memory_state`);
-  const $sumAllBtn = $(`.${settings_content_class} #summarize_all_messages, #summarize_all_messages`);
-  const $toggleBtn = $(`.${settings_content_class} #toggle_chat_memory, #toggle_chat_memory`);
-  const $refreshBtn = $(`.${settings_content_class} #refresh_memory, #refresh_memory`);
+  const content_class = `.${settings_content_class}`;
+  const $editBtn = $(`${content_class} #edit_memory_state, #edit_memory_state`);
+  const $sumAllBtn = $(`${content_class} #summarize_all_messages, #summarize_all_messages`);
+  const $toggleBtn = $(`${content_class} #toggle_chat_memory, #toggle_chat_memory`);
+  const $refreshBtn = $(`${content_class} #refresh_memory, #refresh_memory`);
 
   if (!hasChat) {
     $editBtn.prop('disabled', true).css({ opacity: 0.5, cursor: 'not-allowed' }).attr('title', 'No active chat loaded.');
@@ -1792,6 +1793,10 @@ export function update_chat_buttons_state() {
     $toggleBtn.prop('disabled', false).css({ opacity: 1, cursor: 'pointer' }).attr('title', 'Toggle whether memory is enabled for this chat specifically.');
     $refreshBtn.prop('disabled', false).css({ opacity: 1, cursor: 'pointer' }).attr('title', 'Refreshes inclusion flags and re-renders memory display.');
   }
+}
+
+export function update_chat_buttons_state() {
+  update_chat_buttons_section();
 }
 
 
