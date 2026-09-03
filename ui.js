@@ -777,11 +777,12 @@ export class MemoryEditInterface {
       }
 
       const tokenCount = count_tokens(block.text);
+      const maxLongTokens = get_long_token_limit();
 
       $ltContainer.html(`
         <div class="long_term_view_block" style="display: flex; flex-direction: column; flex: 1; gap: 10px; padding: 5px;">
             <div class="flex-container justifyspacebetween alignitemscenter" style="font-size: 0.9em; opacity: 0.9;">
-                <span>Covering messages <b>#${block.startIndex}</b> to <b>#${block.endIndex}</b> (${tokenCount} tokens)</span>
+                <span>Covering up to message <b>#${block.endIndex}</b> (${tokenCount} tokens out of ${maxLongTokens})</span>
                 <span>Hash: <code style="font-family: monospace; font-size: 0.9em;">${block.hash}</code></span>
             </div>
             <div class="long_term_content_area" style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
