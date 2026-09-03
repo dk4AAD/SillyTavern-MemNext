@@ -484,7 +484,23 @@ export function get_summary_connection_profile() {
 
 export function is_chat_loaded() {
   const ctx = getContext();
-  return Array.isArray(ctx?.chat) && ctx.chat.length > 0;
+  if (!ctx) return false;
+
+  if (ctx.groupId !== undefined && ctx.groupId !== null && ctx.groupId !== '') {
+    return Array.isArray(ctx.chat) && ctx.chat.length > 0;
+  }
+
+  const charId = ctx.characterId;
+  if (charId === undefined || charId === null || charId === '') return false;
+
+  const char = ctx.characters?.[charId];
+  if (!char) return false;
+
+  if (!char.name || (char.name === 'Assistant' && !char.avatar) || !char.chat) {
+    return false;
+  }
+
+  return Array.isArray(ctx.chat) && ctx.chat.length > 0;
 }
 
 export function get_summary_initialized() {

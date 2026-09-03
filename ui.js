@@ -458,6 +458,7 @@ export function refresh_settings() {
   $(`.${settings_content_class} #toggle_chat_memory`).toggleClass('button_highlight', enabled);
   update_context_budget_displays();
   update_save_icon_highlight();
+  update_chat_buttons_state();
 }
 
 export function initialize_chat_menu_buttons() {

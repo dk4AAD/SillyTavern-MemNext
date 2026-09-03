@@ -1,5 +1,5 @@
 import test from 'node:test';
-import { mockChat } from './mocks/sillytavern.js';
+import { mockChat, mockCharacters } from './mocks/sillytavern.js';
 import assert from 'node:assert/strict';
 import {
   get_summary_initialized,
@@ -112,6 +112,13 @@ test('state.js: summary_initialized and is_chat_loaded helpers', () => {
 
   mockChat.length = 0;
   assert.equal(is_chat_loaded(), false);
+
+  // Set active character with active chat file
+  mockCharacters[0].chat = 'chat_file.jsonl';
   mockChat.push({ mes: 'Msg 1' });
   assert.equal(is_chat_loaded(), true);
+
+  // Without active character or group, returns false
+  mockCharacters[0].chat = null;
+  assert.equal(is_chat_loaded(), false);
 });
