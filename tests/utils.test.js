@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  getStringHash,
+  compute_hash,
   clean_string_for_html,
   escape_string,
   unescape_string,
@@ -124,4 +126,22 @@ test('utils.js: refresh_select2_element handles elements without id gracefully',
   } finally {
     global.$ = orig$;
   }
+});
+
+
+test('utils.js: getStringHash and compute_hash compute fast distinguishing hashes', () => {
+  const text1 = "The party arrived at the ancient tavern in the woods.";
+  const text2 = "The party arrived at the ancient tavern in the woods!"; // 1 char diff
+  const hash1 = compute_hash(text1);
+  const hash2 = compute_hash(text2);
+
+  assert.ok(typeof hash1 === 'string' && hash1.length > 0, 'Hash must be a non-empty string');
+  assert.equal(hash1, compute_hash(text1), 'Hash of identical string must be deterministic');
+  assert.notEqual(hash1, hash2, 'Hash of different strings must differ');
+
+  // Empty / null handling
+  assert.equal(compute_hash(''), '');
+  assert.equal(compute_hash(null), '');
+  assert.equal(compute_hash(undefined), '');
+  assert.equal(getStringHash(''), 0);
 });

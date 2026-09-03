@@ -2,7 +2,7 @@
 import { system_message_types, extension_prompt_roles, extension_prompt_types, chat_metadata } from '../../../../script.js';
 import { getContext, saveMetadataDebounced } from '../../../extensions.js';
 import { MODULE_NAME, long_memory_macro, short_memory_macro, generic_memories_macro } from './constants.js';
-import { saveChatDebounced, count_tokens, get_chat_context_size, get_long_token_limit, get_short_token_limit, get_chat_cache_capacity } from "./utils.js";
+import { saveChatDebounced, count_tokens, get_chat_context_size, get_long_token_limit, get_short_token_limit, get_chat_cache_capacity, compute_hash } from "./utils.js";
 import { get_settings, chat_enabled, character_enabled, get_character_key } from "./state.js";
 import { summarize_text, summaryQueue } from "./summarization.js";
 import { default_short_to_long_prompt, default_long_compaction_prompt, default_long_template, default_short_template } from "./macros.js";
@@ -51,6 +51,14 @@ export function set_data(message, key, value) {
 
 export function get_memory(message) {
   return get_data(message, 'memory');
+}
+
+export function get_long_term_hash(message) {
+  return get_data(message, 'long_term_hash') || get_data(message, 'long_term_history_hash');
+}
+
+export function set_long_term_hash(message, hash) {
+  set_data(message, 'long_term_hash', hash);
 }
 
 export function get_chat_long_term_memory() {
@@ -459,9 +467,11 @@ export async function compact_history(compact_start, history_calc_message, old_h
     summaryQueue.finish_compaction_progress();
   }
 
+  const long_hash = compute_hash(final_long);
   for (let i = compact_start; i <= history_calc_message; i++) {
     if (chat[i]) {
       set_data(chat[i], 'long_term_history', final_long);
+      set_data(chat[i], 'long_term_hash', long_hash);
     }
   }
   saveChatDebounced();

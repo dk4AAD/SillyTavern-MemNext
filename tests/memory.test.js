@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { compute_hash } from '../utils.js';
 import {
   get_data,
   set_data,
   get_memory,
+  get_long_term_hash,
+  set_long_term_hash,
   get_chat_long_term_memory,
   set_chat_long_term_memory,
   check_message_exclusion,
@@ -223,12 +226,18 @@ test('memory.js: compact_history multi-message stamping', async () => {
   const compacted = await compact_history(1, 4, 'Previous narrative.');
   assert.ok(compacted.length > 0);
 
-  // Verify that EVERY message in the gap [1..4] received the long_term_history stamp
+  // Verify that EVERY message in the gap [1..4] received long_term_history and long_term_hash stamp
+  const expectedHash = compute_hash(compacted);
+  assert.ok(expectedHash.length > 0, 'Computed hash must be non-empty');
   for (let i = 1; i <= 4; i++) {
     const stamped = get_data(mockChat[i], 'long_term_history');
     assert.equal(stamped, compacted, `Message index ${i} must have stamped long_term_history`);
+    const stampedHash = get_long_term_hash(mockChat[i]);
+    assert.equal(stampedHash, expectedHash, `Message index ${i} must have stamped long_term_hash`);
   }
   // Messages outside gap [0 and 5] should not have been stamped
   assert.equal(get_data(mockChat[0], 'long_term_history'), null);
+  assert.equal(get_long_term_hash(mockChat[0]), null);
   assert.equal(get_data(mockChat[5], 'long_term_history'), null);
+  assert.equal(get_long_term_hash(mockChat[5]), null);
 });

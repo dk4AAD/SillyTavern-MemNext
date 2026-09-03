@@ -307,3 +307,36 @@ export function guard_get_element_by_id() {
     console.debug('[MemNext] Could not install getElementById guard:', e);
   }
 }
+
+/**
+ * 53-bit cyrb53 hash function matching SillyTavern's getStringHash.
+ * Fast, non-cryptographic, with excellent avalanche and low collision probability.
+ * @param {string} str Input string
+ * @param {number} seed Seed (default 0)
+ * @returns {number} 53-bit integer hash
+ */
+export function getStringHash(str, seed = 0) {
+  if (typeof str !== 'string' || !str) {
+    return 0;
+  }
+  let h1 = 0xdeadbeef ^ seed,
+      h2 = 0x41c6ce57 ^ seed;
+  for (let i = 0, ch; i < str.length; i++) {
+    ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return 4294967296 * (2097151 & h2) + (h1 >>> 0);
+}
+
+/**
+ * Computes a fast, distinguishing hexadecimal string hash of a text.
+ * @param {string} text Text to hash
+ * @returns {string} Hexadecimal hash string (e.g. '1b3df5a8e024c')
+ */
+export function compute_hash(text) {
+  if (typeof text !== 'string' || !text) return '';
+  return getStringHash(text).toString(16);
+}
