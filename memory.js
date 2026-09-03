@@ -53,22 +53,115 @@ export function get_memory(message) {
   return get_data(message, 'memory');
 }
 
-export function get_long_term_hash(message) {
-  return get_data(message, 'long_term_hash') || get_data(message, 'long_term_history_hash');
+export function generate_uuid() {
+  if (typeof globalThis.crypto !== 'undefined' && typeof globalThis.crypto.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
 }
 
-export function set_long_term_hash(message, hash) {
-  set_data(message, 'long_term_hash', hash);
+export function get_chat_long_histories() {
+  if (!chat_metadata || typeof chat_metadata !== 'object') return [];
+  if (!chat_metadata[MODULE_NAME] || typeof chat_metadata[MODULE_NAME] !== 'object') return [];
+  if (!Array.isArray(chat_metadata[MODULE_NAME].long_histories)) return [];
+  return chat_metadata[MODULE_NAME].long_histories;
 }
+
+export function get_long_history_by_uuid(uuid) {
+  if (!uuid) return null;
+  const list = get_chat_long_histories();
+  const found = list.find(item => item && item.history_uuid === uuid);
+  return found ? found.history_text : null;
+}
+
+export function add_chat_long_history(text) {
+  const uuid = generate_uuid();
+  if (!chat_metadata || typeof chat_metadata !== 'object') return uuid;
+  if (!chat_metadata[MODULE_NAME] || typeof chat_metadata[MODULE_NAME] !== 'object') {
+    chat_metadata[MODULE_NAME] = {};
+  }
+  if (!Array.isArray(chat_metadata[MODULE_NAME].long_histories)) {
+    chat_metadata[MODULE_NAME].long_histories = [];
+  }
+  chat_metadata[MODULE_NAME].long_histories.push({
+    history_text: text || '',
+    history_uuid: uuid
+  });
+  if (typeof saveMetadataDebounced === 'function') {
+    saveMetadataDebounced();
+  }
+  return uuid;
+}
+
+export function update_chat_long_history(uuid, newText) {
+  if (!uuid) return;
+  const list = get_chat_long_histories();
+  const found = list.find(item => item && item.history_uuid === uuid);
+  if (found) {
+    found.history_text = (newText || '').trim();
+    if (typeof saveMetadataDebounced === 'function') {
+      saveMetadataDebounced();
+    }
+  }
+}
+
+export function delete_chat_long_history(uuid) {
+  if (!uuid) return;
+  if (chat_metadata?.[MODULE_NAME]?.long_histories) {
+    chat_metadata[MODULE_NAME].long_histories = chat_metadata[MODULE_NAME].long_histories.filter(
+      item => item && item.history_uuid !== uuid
+    );
+    if (typeof saveMetadataDebounced === 'function') {
+      saveMetadataDebounced();
+    }
+  }
+
+  const ctx = getContext();
+  const chat = ctx?.chat;
+  if (Array.isArray(chat)) {
+    for (let i = 0; i < chat.length; i++) {
+      if (chat[i] && get_data(chat[i], 'long_history_uuid') === uuid) {
+        set_data(chat[i], 'long_history_uuid', null);
+      }
+    }
+    saveChatDebounced();
+  }
+
+  if (get_long_term_cutoff_index() === -1) {
+    set_injection_threshold_index(null);
+    if (chat_metadata?.[MODULE_NAME]) {
+      chat_metadata[MODULE_NAME].iti = null;
+      chat_metadata[MODULE_NAME].long_injection = "";
+      chat_metadata[MODULE_NAME].short_injection = "";
+    }
+    saveChatDebounced();
+  }
+}
+
+export function get_long_history_uuid(message) {
+  return get_data(message, 'long_history_uuid');
+}
+
+export function set_long_history_uuid(message, uuid) {
+  set_data(message, 'long_history_uuid', uuid);
+}
+
+export function get_long_term_hash(_message) {
+  return null;
+}
+
+export function set_long_term_hash(_message, _hash) {}
 
 export function get_chat_long_term_memory() {
   const block = get_last_long_term_history_block();
   return block ? block.text : '';
 }
 
-export function set_chat_long_term_memory(text) {
-  // Legacy stub: long-term history is managed strictly on per-message level
-}
+export function set_chat_long_term_memory(_text) {}
 
 // Exclusion checking
 export function check_message_exclusion(message) {
@@ -264,10 +357,13 @@ export async function try_for_cc(CC) {
   for (let i = chat.length - 1; i >= 0; i--) {
     if (!chat[i]) continue;
     sum += count_tokens(chat[i].mes || '');
-    let long_history = get_data(chat[i], 'long_term_history');
-    if (long_history) {
-      if (sum <= CC) {
-        return [long_history, null, i];
+    let uuid = get_data(chat[i], 'long_history_uuid');
+    if (uuid) {
+      let long_history = get_long_history_by_uuid(uuid);
+      if (long_history) {
+        if (sum <= CC) {
+          return [long_history, null, i];
+        }
       }
     }
     if (sum > CC) {
@@ -291,11 +387,14 @@ export async function calculate_memo(history_calc_message) {
 
   for (; i >= 0; i--) {
     if (!chat[i]) continue;
-    let lh = get_data(chat[i], 'long_term_history');
-    if (lh) {
-      long_term_history = lh;
-      compact_start = i + 1;
-      break;
+    let uuid = get_data(chat[i], 'long_history_uuid');
+    if (uuid) {
+      let lh = get_long_history_by_uuid(uuid);
+      if (lh) {
+        long_term_history = lh;
+        compact_start = i + 1;
+        break;
+      }
     }
     let mem = get_memory(chat[i]);
     if (mem) {
@@ -458,12 +557,15 @@ export async function compact_history(compact_start, history_calc_message, old_h
     await summaryQueue.finish_compaction_progress();
   }
 
-  const long_hash = compute_hash(final_long);
+  const uuid = add_chat_long_history(final_long);
   for (let i = compact_start; i <= history_calc_message; i++) {
     if (chat[i]) {
-      set_data(chat[i], 'long_term_history', final_long);
-      set_data(chat[i], 'long_term_hash', long_hash);
-      set_data(chat[i], 'include', 'long');
+      set_data(chat[i], 'long_history_uuid', uuid);
+      if (chat[i].extra?.[MODULE_NAME]) {
+        delete chat[i].extra[MODULE_NAME].long_term_history;
+        delete chat[i].extra[MODULE_NAME].long_term_hash;
+        delete chat[i].extra[MODULE_NAME].include;
+      }
     }
   }
   saveChatDebounced();
@@ -475,43 +577,37 @@ export function get_last_long_term_history_block() {
   const chat = ctx?.chat;
   if (!Array.isArray(chat) || chat.length === 0) return null;
 
-  let lastBlock = null;
-  let currentBlock = null;
-
-  for (let i = 0; i < chat.length; i++) {
-    const msg = chat[i];
-    if (!msg) continue;
-    const historyText = get_data(msg, 'long_term_history');
-    if (!historyText || typeof historyText !== 'string' || historyText.trim().length === 0) {
-      if (currentBlock) {
-        lastBlock = currentBlock;
-        currentBlock = null;
-      }
-      continue;
-    }
-
-    const hash = get_long_term_hash(msg) || compute_hash(historyText);
-
-    if (!currentBlock || currentBlock.hash !== hash) {
-      if (currentBlock) {
-        lastBlock = currentBlock;
-      }
-      currentBlock = {
-        startIndex: i,
-        endIndex: i,
-        hash: hash,
-        text: historyText.trim()
-      };
-    } else {
-      currentBlock.endIndex = i;
+  // Search messages from chat end to chat beginning, taking the first long history uuid found
+  let targetUuid = null;
+  let targetEndIndex = -1;
+  for (let i = chat.length - 1; i >= 0; i--) {
+    const uuid = get_data(chat[i], 'long_history_uuid');
+    if (uuid) {
+      targetUuid = uuid;
+      targetEndIndex = i;
+      break;
     }
   }
 
-  if (currentBlock) {
-    lastBlock = currentBlock;
+  if (!targetUuid) return null;
+
+  const historyText = get_long_history_by_uuid(targetUuid);
+  if (!historyText) return null;
+
+  // Find range of messages sharing this long_history_uuid
+  let startIndex = targetEndIndex;
+  for (let i = targetEndIndex; i >= 0; i--) {
+    if (get_data(chat[i], 'long_history_uuid') === targetUuid) {
+      startIndex = i;
+    }
   }
 
-  return lastBlock;
+  return {
+    uuid: targetUuid,
+    text: historyText,
+    startIndex: startIndex,
+    endIndex: targetEndIndex
+  };
 }
 
 export function update_long_term_history_range(startIndex, endIndex, text) {
@@ -520,28 +616,44 @@ export function update_long_term_history_range(startIndex, endIndex, text) {
   if (!Array.isArray(chat) || chat.length === 0) return;
 
   const cleanText = (text || '').trim();
-  const hash = cleanText ? compute_hash(cleanText) : null;
-
-  for (let i = startIndex; i <= endIndex; i++) {
-    if (chat[i]) {
-      set_data(chat[i], 'long_term_history', cleanText || null);
-      set_data(chat[i], 'long_term_hash', hash);
-      set_data(chat[i], 'include', cleanText ? 'long' : null);
+  if (!cleanText) {
+    for (let i = startIndex; i <= endIndex; i++) {
+      if (chat[i]) {
+        set_data(chat[i], 'long_history_uuid', null);
+      }
+    }
+  } else {
+    let existingUuid = null;
+    for (let i = startIndex; i <= endIndex; i++) {
+      if (chat[i]) {
+        existingUuid = get_data(chat[i], 'long_history_uuid');
+        if (existingUuid) break;
+      }
+    }
+    if (existingUuid && get_long_history_by_uuid(existingUuid)) {
+      update_chat_long_history(existingUuid, cleanText);
+    } else {
+      const uuid = add_chat_long_history(cleanText);
+      for (let i = startIndex; i <= endIndex; i++) {
+        if (chat[i]) set_data(chat[i], 'long_history_uuid', uuid);
+      }
     }
   }
   saveChatDebounced();
 }
 
 export function delete_long_term_history_range(startIndex, endIndex) {
-  update_long_term_history_range(startIndex, endIndex, null);
-  if (get_long_term_cutoff_index() === -1) {
-    set_injection_threshold_index(null);
-    if (chat_metadata?.memnext) {
-      chat_metadata.memnext.iti = null;
-      chat_metadata.memnext.long_injection = "";
-      chat_metadata.memnext.short_injection = "";
+  const ctx = getContext();
+  const chat = ctx?.chat;
+  if (!Array.isArray(chat)) return;
+  for (let i = startIndex; i <= endIndex; i++) {
+    if (chat[i]) {
+      const uuid = get_data(chat[i], 'long_history_uuid');
+      if (uuid) {
+        delete_chat_long_history(uuid);
+        return;
+      }
     }
-    saveChatDebounced();
   }
 }
 
@@ -551,8 +663,8 @@ export function get_long_term_cutoff_index() {
   if (!Array.isArray(chat) || chat.length === 0) return -1;
 
   for (let i = chat.length - 1; i >= 0; i--) {
-    const text = get_data(chat[i], 'long_term_history');
-    if (chat[i] && text && typeof text === 'string' && text.trim().length > 0) {
+    const uuid = get_data(chat[i], 'long_history_uuid');
+    if (chat[i] && uuid && get_long_history_by_uuid(uuid)) {
       return i;
     }
   }
@@ -616,7 +728,17 @@ export async function initialize_chat_summarization({ mode = 'all', count = 0, p
 
   if (historyToStamp && chatLength > 0) {
     const historyEnd = Math.max(0, compactStart - 1);
-    update_long_term_history_range(0, historyEnd, historyToStamp);
+    const uuid = add_chat_long_history(historyToStamp);
+    for (let i = 0; i <= historyEnd; i++) {
+      if (chat[i]) {
+        set_data(chat[i], 'long_history_uuid', uuid);
+        if (chat[i].extra?.[MODULE_NAME]) {
+          delete chat[i].extra[MODULE_NAME].long_term_history;
+          delete chat[i].extra[MODULE_NAME].long_term_hash;
+          delete chat[i].extra[MODULE_NAME].include;
+        }
+      }
+    }
   }
 
   set_summary_initialized(true);

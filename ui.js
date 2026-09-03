@@ -75,6 +75,10 @@ import {
   set_chat_long_term_memory,
   get_last_long_term_history_block,
   get_long_term_cutoff_index,
+  get_long_history_by_uuid,
+  add_chat_long_history,
+  update_chat_long_history,
+  delete_chat_long_history,
   update_long_term_history_range,
   delete_long_term_history_range,
   check_message_exclusion,
@@ -204,19 +208,16 @@ export function update_message_visuals(i, in_progress = false, custom_text = nul
   const message = ctx?.chat?.[i];
   if (!message) return;
 
-  const long_history = get_data(message, 'long_term_history');
+  const uuid = get_data(message, 'long_history_uuid');
+  const long_history = uuid ? get_long_history_by_uuid(uuid) : null;
   const memory_text = custom_text || get_memory(message) || long_history;
   if (!memory_text) return;
 
-  const include = get_data(message, 'include') || (long_history ? 'long' : 'short');
   const iti = get_injection_threshold_index();
   const lagging = iti === null || iti === undefined ? true : (i > iti);
 
   // Default to short memory, use long memory styling when part of long-term history
-  let style_class = css_short_memory;
-  if (include === 'long') {
-    style_class = css_long_memory;
-  }
+  let style_class = uuid ? css_long_memory : css_short_memory;
   if (lagging) {
     style_class += ` ${css_lagging_memory}`;
   }
@@ -383,7 +384,14 @@ export function initialize_settings_ui() {
     toast("Full chat summarization and memory update complete.", "success");
   });
   $(`.${settings_content_class} #clear_long_term_memory`).on('click', () => {
-    if (Array.isArray(chat) && chat.length > 0) { delete_long_term_history_range(0, chat.length - 1); }
+    if (chat_metadata?.[MODULE_NAME]?.long_histories) {
+      chat_metadata[MODULE_NAME].long_histories = [];
+    }
+    if (Array.isArray(chat) && chat.length > 0) {
+      for (let i = 0; i < chat.length; i++) {
+        if (chat[i]) set_data(chat[i], 'long_history_uuid', null);
+      }
+    }
     refresh_memory();
     toast("Long-term memory cleared for this chat.", "info");
   });
@@ -791,7 +799,7 @@ export class MemoryEditInterface {
         <div class="long_term_view_block" style="display: flex; flex-direction: column; flex: 1; gap: 10px; padding: 5px;">
             <div class="flex-container justifyspacebetween alignitemscenter" style="font-size: 0.9em; opacity: 0.9;">
                 <span>Covering up to message <b>#${block.endIndex}</b> (${tokenCount} tokens out of ${maxLongTokens})</span>
-                <span>Hash: <code style="font-family: monospace; font-size: 0.9em;">${block.hash}</code></span>
+                <span>UUID: <code style="font-family: monospace; font-size: 0.9em;">${block.uuid}</code></span>
             </div>
             <div class="long_term_content_area" style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
                 <div class="long_term_display_text" style="padding: 12px; white-space: pre-wrap; font-family: monospace; background: var(--SmartThemeBlurTintColor); border: 1px solid var(--SmartThemeBorderColor); border-radius: 5px; flex: 1; overflow-y: auto;">${escape_string(block.text)}</div>
@@ -804,7 +812,7 @@ export class MemoryEditInterface {
       `);
 
       $ltContainer.find('.lt_delete_btn').on('click', () => {
-        delete_long_term_history_range(block.startIndex, block.endIndex);
+        delete_chat_long_history(block.uuid);
         update_all_message_visuals();
         populateLongTerm();
       });
@@ -825,7 +833,7 @@ export class MemoryEditInterface {
         $contentArea.find('.lt_save_btn').on('click', () => {
           const newText = $textarea.val().trim();
           if (newText !== block.text) {
-            update_long_term_history_range(block.startIndex, block.endIndex, newText);
+            update_chat_long_history(block.uuid, newText);
             update_all_message_visuals();
           }
           populateLongTerm();
