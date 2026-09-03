@@ -490,7 +490,7 @@ export function get_last_long_term_history_block() {
     const msg = chat[i];
     if (!msg) continue;
     const historyText = get_data(msg, 'long_term_history');
-    if (!historyText) {
+    if (!historyText || typeof historyText !== 'string' || historyText.trim().length === 0) {
       if (currentBlock) {
         lastBlock = currentBlock;
         currentBlock = null;
@@ -508,7 +508,7 @@ export function get_last_long_term_history_block() {
         startIndex: i,
         endIndex: i,
         hash: hash,
-        text: historyText
+        text: historyText.trim()
       };
     } else {
       currentBlock.endIndex = i;
@@ -541,8 +541,16 @@ export function update_long_term_history_range(startIndex, endIndex, text) {
 
 export function delete_long_term_history_range(startIndex, endIndex) {
   update_long_term_history_range(startIndex, endIndex, null);
+  if (get_long_term_cutoff_index() === -1) {
+    set_injection_threshold_index(null);
+    if (chat_metadata?.memnext) {
+      chat_metadata.memnext.iti = null;
+      chat_metadata.memnext.long_injection = "";
+      chat_metadata.memnext.short_injection = "";
+    }
+    saveChatDebounced();
+  }
 }
-
 
 export function get_long_term_cutoff_index() {
   const ctx = getContext();
@@ -550,7 +558,8 @@ export function get_long_term_cutoff_index() {
   if (!Array.isArray(chat) || chat.length === 0) return -1;
 
   for (let i = chat.length - 1; i >= 0; i--) {
-    if (chat[i] && get_data(chat[i], 'long_term_history')) {
+    const text = get_data(chat[i], 'long_term_history');
+    if (chat[i] && text && typeof text === 'string' && text.trim().length > 0) {
       return i;
     }
   }
