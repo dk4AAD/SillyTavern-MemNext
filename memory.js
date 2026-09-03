@@ -586,7 +586,7 @@ export async function initialize_chat_summarization({ mode = 'all', count = 0, p
       summaryQueue.add_extra_total(unsummarized.length, "Initial Chat Summarization...");
     }
     for (let idx of unsummarized) {
-      const prompt = create_summary_prompt(idx);
+      const prompt = await create_summary_prompt(idx);
       if (prompt && prompt.length > 0) {
         const res = await summarize_text(prompt);
         if (res) {
@@ -604,12 +604,19 @@ export async function initialize_chat_summarization({ mode = 'all', count = 0, p
   const cleanPrior = (priorHistory || '').trim();
   let historyToStamp = cleanPrior;
 
-  if (!historyToStamp && compactStart < chatLength) {
-    historyToStamp = get_memory(chat[compactStart]) || '';
+  if (!historyToStamp) {
+    for (let i = compactStart; i < chatLength; i++) {
+      const mem = get_memory(chat[i]);
+      if (mem) {
+        historyToStamp = mem;
+        break;
+      }
+    }
   }
 
-  if (historyToStamp && compactStart > 0) {
-    update_long_term_history_range(0, compactStart - 1, historyToStamp);
+  if (historyToStamp && chatLength > 0) {
+    const historyEnd = Math.max(0, compactStart - 1);
+    update_long_term_history_range(0, historyEnd, historyToStamp);
   }
 
   set_summary_initialized(true);

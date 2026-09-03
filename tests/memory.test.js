@@ -355,3 +355,35 @@ test('memory.js: initialize_chat_summarization stamps prior history across prefi
     assert.equal(get_data(mockChat[i], 'long_term_history'), 'Prequel story before event.');
   }
 });
+
+
+test('memory.js: initialize_chat_summarization mode all stamps message 0 with summary fallback or priorHistory', async () => {
+  mockChat.length = 0;
+  for (let i = 0; i < 5; i++) {
+    mockChat.push({ mes: `A sufficiently long test narrative message exceeding length threshold ${i}` });
+  }
+
+  // 1. Mode 'all' with no prior history -> message 0's summary becomes long_term_history on message 0
+  await initialize_chat_summarization({ mode: 'all', priorHistory: '' });
+  assert.equal(get_summary_initialized(), true);
+  const mem0 = get_memory(mockChat[0]);
+  assert.ok(mem0, 'Message 0 must have a generated short memory');
+  assert.equal(get_data(mockChat[0], 'long_term_history'), mem0, 'Message 0 must have long_term_history set to its summary');
+  assert.equal(get_long_term_hash(mockChat[0]), compute_hash(mem0), 'Message 0 must have long_term_hash matching its summary');
+  assert.equal(get_data(mockChat[0], 'include'), 'long');
+
+  // Messages 1..4 should have short memories but null long_term_history
+  for (let i = 1; i < 5; i++) {
+    assert.equal(get_data(mockChat[i], 'long_term_history'), null);
+  }
+
+  // 2. Mode 'all' with explicit priorHistory -> message 0 gets user prior history
+  mockChat.length = 0;
+  for (let i = 0; i < 3; i++) {
+    mockChat.push({ mes: `A sufficiently long test narrative message exceeding length threshold ${i}` });
+  }
+  await initialize_chat_summarization({ mode: 'all', priorHistory: 'Manual backstory text' });
+  assert.equal(get_data(mockChat[0], 'long_term_history'), 'Manual backstory text');
+  assert.equal(get_long_term_hash(mockChat[0]), compute_hash('Manual backstory text'));
+  assert.equal(get_data(mockChat[1], 'long_term_history'), null);
+});
