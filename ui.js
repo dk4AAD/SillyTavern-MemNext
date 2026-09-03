@@ -1774,11 +1774,12 @@ export class SummaryInitModal {
 
 
 export function update_chat_buttons_state() {
+  if (typeof $ === 'undefined') return;
   const hasChat = is_chat_loaded();
-  const $editBtn = $('#edit_memory_state');
-  const $sumAllBtn = $('#summarize_all_messages');
-  const $toggleBtn = $('#toggle_chat_memory');
-  const $refreshBtn = $('#refresh_memory');
+  const $editBtn = $(`.${settings_content_class} #edit_memory_state, #edit_memory_state`);
+  const $sumAllBtn = $(`.${settings_content_class} #summarize_all_messages, #summarize_all_messages`);
+  const $toggleBtn = $(`.${settings_content_class} #toggle_chat_memory, #toggle_chat_memory`);
+  const $refreshBtn = $(`.${settings_content_class} #refresh_memory, #refresh_memory`);
 
   if (!hasChat) {
     $editBtn.prop('disabled', true).css({ opacity: 0.5, cursor: 'not-allowed' }).attr('title', 'No active chat loaded.');

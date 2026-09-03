@@ -160,8 +160,9 @@ if (typeof jQuery !== 'undefined') {
           eventSource.on(event_types.USER_MESSAGE_RENDERED, id => on_chat_event('user_message', id));
           eventSource.on(event_types.MESSAGE_EDITED, id => on_chat_event('message_edited', id));
           eventSource.on(event_types.MESSAGE_SWIPED, id => on_chat_event('message_swiped', id));
-          eventSource.on(event_types.CHAT_CHANGED, () => on_chat_event('chat_changed'));
-          if (event_types.CHARACTER_SELECTED) eventSource.on(event_types.CHARACTER_SELECTED, () => on_chat_event('chat_changed'));
+          if (event_types.CHAT_CHANGED) eventSource.on(event_types.CHAT_CHANGED, () => on_chat_event('chat_changed'));
+          if (event_types.CHAT_LOADED) eventSource.on(event_types.CHAT_LOADED, () => on_chat_event('chat_changed'));
+          if (event_types.CHARACTER_PAGE_LOADED) eventSource.on(event_types.CHARACTER_PAGE_LOADED, () => on_chat_event('chat_changed'));
           if (event_types.MORE_MESSAGES_LOADED) eventSource.on(event_types.MORE_MESSAGES_LOADED, () => on_chat_event('chat_changed'));
           eventSource.on(event_types.MESSAGE_DELETED, () => on_chat_event('message_deleted'));
         }

@@ -455,6 +455,7 @@ export function set_chat_profile(profile = null) {
 export function auto_load_profile() {
   let profile = get_chat_profile() || get_character_profile();
   load_profile(profile || 'Default');
+  notify_ui_refresh();
 }
 
 export function get_connection_profiles() {
