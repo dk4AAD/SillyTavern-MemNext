@@ -1756,10 +1756,9 @@ export class SummaryInitModal {
         $tokenCountDisplay.text(count_tokens(text));
       });
 
-      $content.find('#memnext_init_cancel_btn').on('click', () => {
-        if (popup && typeof popup.complete === 'function') popup.complete();
-        else if (popup && typeof popup.close === 'function') popup.close();
-
+      $content.find('#memnext_init_cancel_btn').on('click', async () => {
+        if (popup && typeof popup.completeCancelled === 'function') await popup.completeCancelled();
+        else if (popup && typeof popup.complete === 'function') await popup.complete(this.ctx?.POPUP_RESULT?.CANCELLED ?? 0);
         resolve(false);
       });
 
@@ -1768,8 +1767,8 @@ export class SummaryInitModal {
         const count = parseInt($content.find('#memnext_init_n_count').val(), 10) || chatLength;
         const priorHistory = $textarea.val() || '';
 
-        if (popup && typeof popup.complete === 'function') popup.complete();
-        else if (popup && typeof popup.close === 'function') popup.close();
+        if (popup && typeof popup.completeAffirmative === 'function') await popup.completeAffirmative();
+        else if (popup && typeof popup.complete === 'function') await popup.complete(this.ctx?.POPUP_RESULT?.AFFIRMATIVE ?? 1);
 
         await initialize_chat_summarization({ mode, count, priorHistory });
         resolve(true);
