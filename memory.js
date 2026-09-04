@@ -753,21 +753,9 @@ export async function initialize_chat_summarization({ mode = 'all', count = 0, p
 
     // Prior history handling
     const cleanPrior = (priorHistory || '').trim();
-    let historyToStamp = cleanPrior;
-
-    if (!historyToStamp) {
-      for (let i = compactStart; i < chatLength; i++) {
-        const mem = get_memory(chat[i]);
-        if (mem) {
-          historyToStamp = mem;
-          break;
-        }
-      }
-    }
-
-    if (historyToStamp && chatLength > 0) {
+    if (cleanPrior && chatLength > 0) {
       const historyEnd = Math.max(0, compactStart - 1);
-      const uuid = add_chat_long_history(historyToStamp);
+      const uuid = add_chat_long_history(cleanPrior);
       for (let i = 0; i <= historyEnd; i++) {
         if (chat[i]) {
           set_data(chat[i], 'long_history_uuid', uuid);

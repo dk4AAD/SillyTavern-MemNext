@@ -324,31 +324,24 @@ test('memory.js: initialize_chat_summarization stamps prior history across prefi
   }
 });
 
-test('memory.js: initialize_chat_summarization mode all stamps message 0 with summary fallback or priorHistory', async () => {
+test('memory.js: initialize_chat_summarization mode all does not initiate long term history if priorHistory is empty', async () => {
   mockChat.length = 0;
   chat_metadata.memnext = { long_histories: [] };
   for (let i = 0; i < 5; i++) {
     mockChat.push({ mes: `A sufficiently long test narrative message exceeding length threshold ${i}` });
   }
 
-  // 1. Mode 'all' with no prior history -> message 0's summary becomes long_term_history in chat storage
+  // 1. Mode 'all' with no prior history -> should NOT initiate long-term history
   await initialize_chat_summarization({ mode: 'all', priorHistory: '' });
   assert.equal(get_summary_initialized(), true);
   const mem0 = get_memory(mockChat[0]);
   assert.ok(mem0, 'Message 0 must have a generated short memory');
 
   const chatHistories = get_chat_long_histories();
-  assert.equal(chatHistories.length, 1);
-  assert.equal(chatHistories[0].history_text, mem0);
-  const uuid = chatHistories[0].history_uuid;
+  assert.equal(chatHistories.length, 0, 'No long-term history record should be created when priorHistory is empty');
 
-  assert.equal(get_long_history_uuid(mockChat[0]), uuid);
-  assert.equal(get_data(mockChat[0], 'long_term_history'), null);
-  assert.equal(get_data(mockChat[0], 'include'), null);
-
-  // Messages 1..4 should have short memories but null long_history_uuid
-  for (let i = 1; i < 5; i++) {
-    assert.equal(get_long_history_uuid(mockChat[i]), null);
+  for (let i = 0; i < 5; i++) {
+    assert.equal(get_long_history_uuid(mockChat[i]), null, `Message ${i} must not have long_history_uuid`);
   }
 
   // 2. Mode 'all' with explicit priorHistory -> message 0 gets user prior history in chat storage
