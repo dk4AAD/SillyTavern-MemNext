@@ -11,6 +11,7 @@ import {
   get_chat_context_size,
   get_long_token_limit,
   get_max_sum_context,
+  trim_to_end_sentence,
   get_short_token_limit,
   get_chat_cache_capacity,
   get_free_context_space,
@@ -178,4 +179,12 @@ test('utils.js: limits clamp configured tokens if percentage of chat context exc
   const max_ceiling_short = Math.floor(max_sum / 2);
   assert.ok(get_long_token_limit() <= max_ceiling_long);
   assert.ok(get_short_token_limit() <= max_ceiling_short);
+});
+
+test('utils.js: trim_to_end_sentence truncates incomplete trailing sentences cleanly', () => {
+  assert.equal(trim_to_end_sentence('First sentence. Incomplete sentence without'), 'First sentence.');
+  assert.equal(trim_to_end_sentence('Completed sentence!'), 'Completed sentence!');
+  assert.equal(trim_to_end_sentence('Question answered? Extra words'), 'Question answered?');
+  assert.equal(trim_to_end_sentence('No punctuation at all'), 'No punctuation at all');
+  assert.equal(trim_to_end_sentence(''), '');
 });

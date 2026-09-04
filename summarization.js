@@ -279,7 +279,7 @@ export function clean_llm_reasoning_tags(text, template = null) {
 }
 
 // LLM Interaction for Summarization
-export async function summarize_text(messages, streaming = false) {
+export async function summarize_text(messages, streaming = false, custom_max_tokens = null) {
   const profile = get_active_connection_profile();
   const profile_id = profile?.id;
   const context = getContext();
@@ -290,12 +290,13 @@ export async function summarize_text(messages, streaming = false) {
   // 1. Prefer Tavern's ConnectionManagerRequestService if available
   if (profile_id && context?.ConnectionManagerRequestService?.sendRequest) {
     try {
-      const max_tokens = get_summary_max_tokens();
+      const max_tokens = custom_max_tokens || get_summary_max_tokens();
       const response = await context.ConnectionManagerRequestService.sendRequest(
         profile_id,
         messages,
         max_tokens,
-        { extractData: true, includePreset: true, stream: false }
+        { extractData: true, includePreset: true, stream: false },
+        { max_tokens: max_tokens }
       );
       if (typeof response === 'string') {
         rawContent = response;
@@ -325,7 +326,8 @@ export async function summarize_text(messages, streaming = false) {
 
     try {
       if (typeof generateRaw === 'function') {
-        const response = await generateRaw(prompt, main_api, false, false, generate_options);
+        const max_tokens = custom_max_tokens || get_summary_max_tokens();
+        const response = await generateRaw(prompt, main_api, false, false, { ...generate_options, responseLength: max_tokens });
         rawContent = typeof response === 'string' ? response.trim() : (response?.text || '').trim();
       }
     } catch (err) {

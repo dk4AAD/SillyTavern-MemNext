@@ -3,7 +3,7 @@ import { system_message_types, extension_prompt_roles, extension_prompt_types, c
 import { getContext, saveMetadataDebounced } from '../../../extensions.js';
 import { MODULE_NAME, long_memory_macro, short_memory_macro, generic_memories_macro } from './constants.js';
 import { log, saveChatDebounced, count_tokens, get_chat_context_size,
-  get_max_sum_context, get_long_token_limit, get_short_token_limit, get_chat_cache_capacity, compute_hash } from "./utils.js";
+  get_max_sum_context, get_long_token_limit, get_short_token_limit, get_chat_cache_capacity, compute_hash, trim_to_end_sentence } from "./utils.js";
 import { get_settings, chat_enabled, character_enabled, get_character_key, get_summary_initialized, set_summary_initialized, is_chat_loaded } from "./state.js";
 import { summarize_text, summaryQueue } from "./summarization.js";
 import { default_short_to_long_prompt, default_long_history_initiate_prompt, default_long_compaction_prompt, default_long_template, default_short_template, create_summary_prompt } from "./macros.js";
@@ -529,7 +529,8 @@ export async function map_reduce_compress(items, max_sum_context, depth = 0) {
       .replace(/{{long_history_size}}/g, N);
     const prompt_tokens = count_tokens(compiled);
     log(`[Compaction Map Batch ${b + 1}/${batches.length} (Depth ${depth})] Estimated prompt tokens: ${prompt_tokens} (from ${batch.length} summaries, target words N: ${N}):\n--- PROMPT START ---\n${compiled}\n--- PROMPT END ---`);
-    const res = await summarize_text([{ role: 'system', content: compiled }]);
+    const raw_res = await summarize_text([{ role: 'system', content: compiled }], false, long_history_size);
+    const res = trim_to_end_sentence(raw_res);
     const res_tokens = count_tokens(res);
     log(`[Compaction Map Batch ${b + 1}/${batches.length} (Depth ${depth})] Response tokens: ${res_tokens}:\n--- RESPONSE START ---\n${res}\n--- RESPONSE END ---`);
     compressed_batches.push(res);
@@ -602,10 +603,11 @@ export async function compact_history(compact_start, history_calc_message, old_h
   if (summaryQueue && typeof summaryQueue.add_extra_total === 'function') {
     summaryQueue.add_extra_total(1, "Compacting long-term memory...");
   }
-  const final_long = await summarize_text([{
+  const raw_final_long = await summarize_text([{
     role: 'system',
     content: compiled_prompt
-  }]);
+  }], false, long_budget);
+  const final_long = trim_to_end_sentence(raw_final_long);
   log(`[Compaction ${stage_label}] Response tokens: ${count_tokens(final_long)}:\n--- RESPONSE START ---\n${final_long}\n--- RESPONSE END ---`);
   if (summaryQueue && typeof summaryQueue.step_progress === 'function') {
     summaryQueue.step_progress("Compacting long-term memory...");

@@ -382,3 +382,28 @@ export function compute_hash(text) {
   if (typeof text !== 'string' || !text) return '';
   return getStringHash(text).toString(16);
 }
+
+export function trim_to_end_sentence(input) {
+  if (!input) return '';
+  const punctuation = new Set(['.', '!', '?', '*', '"', ')', '}', '`', ']', '$', '。', '！', '？', '”', '）', '】', '’', '」', '_']);
+  const characters = Array.from(input);
+  let last = -1;
+
+  for (let i = characters.length - 1; i >= 0; i--) {
+    const char = characters[i];
+    if (punctuation.has(char) || /(\p{Emoji_Presentation}|\p{Extended_Pictographic})/gu.test(char)) {
+      if (i > 0 && /[\s\n]/.test(characters[i - 1])) {
+        last = i - 1;
+      } else {
+        last = i;
+      }
+      break;
+    }
+  }
+
+  if (last === -1) {
+    return input.trimEnd();
+  }
+
+  return characters.slice(0, last + 1).join('').trimEnd();
+}
