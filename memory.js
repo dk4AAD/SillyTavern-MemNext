@@ -504,8 +504,8 @@ export async function map_reduce_compress(items, max_sum_context, depth = 0) {
 
   // 5.1 BATCH CALCULATION
   const short_recomp_template = get_settings('short_to_long_prompt') || default_short_to_long_prompt;
-  const N = Math.floor((max_sum_context / 3) / 1.4);
-  const long_history_size = Math.floor(max_sum_context / 3);
+  const long_history_size = get_long_token_limit();
+  const N = Math.floor(long_history_size / 1.4);
   const dummy_prompt = short_recomp_template
     .replace(/{{short_memory_list}}/g, '')
     .replace(/{{long_history_size}}/g, N);

@@ -79,17 +79,20 @@ export function get_max_sum_context() {
   return 4096;
 }
 
-export function get_long_token_limit() {
-  const limit_percent = Number(get_settings('long_term_context_limit')) || 20;
-  const context_size = get_chat_context_size();
-  const configured_tokens = Math.floor(context_size * (limit_percent / 100));
-
+export function get_max_long_token_limit() {
   const max_sum_context = get_max_sum_context();
   const initiate_prompt = get_settings('long_history_initiate') || default_long_history_initiate_prompt;
   const long_prompt = get_settings('long_compaction_prompt') || default_long_compaction_prompt;
   const short_prompt = get_settings('short_to_long_prompt') || default_short_to_long_prompt;
   const overhead = Math.max(count_tokens(initiate_prompt), count_tokens(long_prompt), count_tokens(short_prompt));
-  const max_long_tokens = Math.max(100, Math.floor(max_sum_context / 3) - overhead);
+  return Math.max(100, Math.floor(max_sum_context / 3) - overhead);
+}
+
+export function get_long_token_limit() {
+  const limit_percent = Number(get_settings('long_term_context_limit')) || 20;
+  const context_size = get_chat_context_size();
+  const configured_tokens = Math.floor(context_size * (limit_percent / 100));
+  const max_long_tokens = get_max_long_token_limit();
 
   return Math.min(configured_tokens, max_long_tokens);
 }
