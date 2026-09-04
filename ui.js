@@ -676,20 +676,7 @@ export class PromptEditInterface {
     const $textarea = $content.find('#prompt_text');
     const $restore = $content.find('#restore_default');
 
-    let current_val = get_settings(this.setting_key);
-    if (this.setting_key === 'short_to_long_prompt') {
-      if (!current_val || current_val.includes('{{existing_long_memory}}') || current_val.includes('{{new_events}}')) {
-        current_val = this.default_prompt;
-        set_settings(this.setting_key, current_val);
-      }
-    } else if (this.setting_key === 'long_compaction_prompt') {
-      if (!current_val || !current_val.includes('{{new_history_chunk}}')) {
-        current_val = this.default_prompt;
-        set_settings(this.setting_key, current_val);
-      }
-    }
-
-    $textarea.val(current_val || this.default_prompt);
+    $textarea.val(get_settings(this.setting_key) || this.default_prompt);
     $restore.on('click', () => {
       $textarea.val(this.default_prompt);
     });

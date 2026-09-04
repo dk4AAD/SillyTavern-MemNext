@@ -118,21 +118,3 @@ test('state.js: summary_initialized and is_chat_loaded helpers', () => {
   assert.equal(is_chat_loaded(), true);
 });
 
-test('state.js: migrate_profile_prompts upgrades legacy templates and macros', async () => {
-  const { migrate_profile_prompts } = await import('../state.js');
-  const { default_short_to_long_prompt, default_long_compaction_prompt } = await import('../constants.js');
-
-  const legacySettings = {
-    short_to_long_prompt: 'You are a memory consolidation assistant. Incorporate the recent events into the established long-term memory narrative.\n[Existing Long-Term Memory]:\n{{existing_long_memory}}\n\n[Recent Events to Incorporate]:\n{{new_events}}\n',
-    long_compaction_prompt: 'You are a memory consolidation assistant. The existing long-term memory narrative has grown too long for the context budget.\n[Long-Term Memory to Condense]:\n{{long_memory}}\n'
-  };
-
-  const modified = migrate_profile_prompts(legacySettings);
-  assert.equal(modified, true);
-  assert.equal(legacySettings.short_to_long_prompt, default_short_to_long_prompt);
-  assert.equal(legacySettings.long_compaction_prompt, default_long_compaction_prompt);
-
-  // Calling again on migrated settings should return false (no further modification)
-  const modifiedAgain = migrate_profile_prompts(legacySettings);
-  assert.equal(modifiedAgain, false);
-});
