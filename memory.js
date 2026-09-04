@@ -2,7 +2,7 @@
 import { system_message_types, extension_prompt_roles, extension_prompt_types, chat_metadata } from '../../../../script.js';
 import { getContext, saveMetadataDebounced } from '../../../extensions.js';
 import { MODULE_NAME, long_memory_macro, short_memory_macro, generic_memories_macro } from './constants.js';
-import { saveChatDebounced, count_tokens, get_chat_context_size,
+import { log, saveChatDebounced, count_tokens, get_chat_context_size,
   get_max_sum_context, get_long_token_limit, get_short_token_limit, get_chat_cache_capacity, compute_hash } from "./utils.js";
 import { get_settings, chat_enabled, character_enabled, get_character_key, get_summary_initialized, set_summary_initialized, is_chat_loaded } from "./state.js";
 import { summarize_text, summaryQueue } from "./summarization.js";
@@ -513,17 +513,24 @@ export async function map_reduce_compress(items, max_sum_context, depth = 0) {
 
   const batches = partition_balanced_token_batches(items, BATCH_CAPACITY);
 
+  log(`[Compaction Map Phase] Depth: ${depth}, Input items: ${items.length}, max_sum_context: ${max_sum_context}, BATCH_CAPACITY: ${BATCH_CAPACITY} tokens, Target words per batch (N): ${N}. Partitioned into ${batches.length} batch(es).`);
+
   if (summaryQueue && typeof summaryQueue.add_extra_total === 'function') {
     summaryQueue.add_extra_total(batches.length, "Compacting memory (short re-compaction)...");
   }
 
   // 5.2 MAP PHASE (Compression)
   const compressed_batches = [];
-  for (const batch of batches) {
+  for (let b = 0; b < batches.length; b++) {
+    const batch = batches[b];
     const compiled = short_recomp_template
       .replace(/{{short_memory_list}}/g, batch.join('\n'))
       .replace(/{{long_history_size}}/g, N);
+    const prompt_tokens = count_tokens(compiled);
+    log(`[Compaction Map Batch ${b + 1}/${batches.length} (Depth ${depth})] Estimated prompt tokens: ${prompt_tokens} (from ${batch.length} summaries, target words N: ${N}):\n--- PROMPT START ---\n${compiled}\n--- PROMPT END ---`);
     const res = await summarize_text([{ role: 'system', content: compiled }]);
+    const res_tokens = count_tokens(res);
+    log(`[Compaction Map Batch ${b + 1}/${batches.length} (Depth ${depth})] Response tokens: ${res_tokens}:\n--- RESPONSE START ---\n${res}\n--- RESPONSE END ---`);
     compressed_batches.push(res);
     if (summaryQueue && typeof summaryQueue.step_progress === 'function') {
       summaryQueue.step_progress("Compacting memory (short re-compaction)...");
@@ -533,6 +540,7 @@ export async function map_reduce_compress(items, max_sum_context, depth = 0) {
   // 5.3 REDUCE PHASE (Recursion Check)
   const total_tokens = count_tokens(compressed_batches.join('\n'));
   const half_max = Math.floor(max_sum_context / 2);
+  log(`[Compaction Reduce Check (Depth ${depth})] Compressed batches total tokens: ${total_tokens} (half_max ceiling: ${half_max} tokens, batches count: ${compressed_batches.length})`);
   if (total_tokens <= half_max || compressed_batches.length === 1 || depth >= 5) {
     return compressed_batches;
   }
@@ -571,6 +579,9 @@ export async function compact_history(compact_start, history_calc_message, old_h
     .replace(/{{new_history_chunk}}/g, new_history_chunk)
     .replace(/{{long_term_memory_size}}/g, target_words);
 
+  const long_prompt_tokens = count_tokens(compiled_long);
+  log(`[Compaction Final Long Merge] Estimated prompt tokens: ${long_prompt_tokens} (long_budget: ${long_budget} tokens, target_words: ${target_words}, new_history_chunk tokens: ${count_tokens(new_history_chunk)}):\n--- PROMPT START ---\n${compiled_long}\n--- PROMPT END ---`);
+
   if (summaryQueue && typeof summaryQueue.add_extra_total === 'function') {
     summaryQueue.add_extra_total(1, "Compacting long-term memory...");
   }
@@ -578,6 +589,7 @@ export async function compact_history(compact_start, history_calc_message, old_h
     role: 'system',
     content: compiled_long
   }]);
+  log(`[Compaction Final Long Merge] Response tokens: ${count_tokens(final_long)}:\n--- RESPONSE START ---\n${final_long}\n--- RESPONSE END ---`);
   if (summaryQueue && typeof summaryQueue.step_progress === 'function') {
     summaryQueue.step_progress("Compacting long-term memory...");
   }

@@ -4,7 +4,7 @@ import { getContext } from '../../../extensions.js';
 import { getStringHash } from '../../../utils.js';
 import { t } from '../../../i18n.js';
 import { PROGRESS_BAR_ID } from './constants.js';
-import { debug, toast, saveChatDebounced } from './utils.js';
+import { log, debug, toast, saveChatDebounced, count_tokens } from './utils.js';
 import { get_settings, chat_enabled, get_active_connection_profile, auto_load_profile, notify_ui_refresh, get_summary_initialized } from './state.js';
 import { set_data, get_memory, check_message_exclusion, refresh_memory, fillup, INJECTION_THRESHOLD_INDEX, set_injection_threshold_index, get_injection_threshold_index } from './memory.js';
 import { create_summary_prompt } from './macros.js';
@@ -387,6 +387,9 @@ export async function summarize_message(index) {
       prefill: prefill,
       ctx: ctx
     });
+
+    const msgPromptTokens = messages.reduce((acc, m) => acc + count_tokens(m.content), 0);
+    log(`[Message Summary #${index}] Estimated prompt tokens: ${msgPromptTokens}:\n--- PROMPT START ---\n${messages.map(m => `[${m.role}]: ${m.content}`).join('\n')}\n--- PROMPT END ---`);
 
     let summary = await summarize_text(messages);
     if (summary && get_settings('show_prefill') && prefill && !summary.startsWith(prefill)) {
