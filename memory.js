@@ -504,12 +504,13 @@ export async function map_reduce_compress(items, max_sum_context, depth = 0) {
 
   // 5.1 BATCH CALCULATION
   const short_recomp_template = get_settings('short_to_long_prompt') || default_short_to_long_prompt;
-  const N = Math.floor((max_sum_context / 3) / 1.4);
+  const long_history_size = Math.floor((max_sum_context / 3) / 1.4);
+  const N = long_history_size;
   const dummy_prompt = short_recomp_template
     .replace(/{{short_memory_list}}/g, '')
-    .replace(/{{long_history_size}}/g, N);
+    .replace(/{{long_history_size}}/g, long_history_size);
   const compact_prompt_tokens = count_tokens(dummy_prompt);
-  const BATCH_CAPACITY = Math.max(100, max_sum_context - compact_prompt_tokens);
+  const BATCH_CAPACITY = Math.max(100, max_sum_context - compact_prompt_tokens - long_history_size);
 
   const batches = partition_balanced_token_batches(items, BATCH_CAPACITY);
 
