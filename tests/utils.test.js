@@ -48,7 +48,10 @@ test('utils.js: context calculation functions work correctly', () => {
   const ctxSize = get_chat_context_size();
   assert.equal(ctxSize, 8192); // from mock
   // default limits: 20% long, 15% short
-  assert.equal(get_long_token_limit(), Math.floor(8192 * 0.2));
+  // Long limit is clamped by floor(max_sum_context / 3) - overhead (1107 tokens vs 1638)
+  const max_long_ceiling = Math.floor(get_max_sum_context() / 3);
+  assert.ok(get_long_token_limit() <= max_long_ceiling);
+  assert.equal(get_long_token_limit(), 1107);
   assert.equal(get_short_token_limit(), Math.floor(8192 * 0.15));
   assert.equal(get_free_context_space(), 8192);
   assert.equal(get_free_context_percent(), 100);
@@ -153,10 +156,10 @@ test('utils.js: get_max_sum_context resolves from preset or falls back strictly 
   assert.equal(get_max_sum_context(), 4096);
 });
 
-test('utils.js: get_long_token_limit respects ceiling of max_sum_context / 2 minus overhead', () => {
+test('utils.js: get_long_token_limit respects ceiling of max_sum_context / 3 minus overhead', () => {
   const limit = get_long_token_limit();
   const max_sum = get_max_sum_context();
-  assert.ok(limit <= Math.floor(max_sum / 2));
+  assert.ok(limit <= Math.floor(max_sum / 3));
 });
 
 test('utils.js: get_short_token_limit respects ceiling of max_sum_context / 2 minus overhead', () => {
@@ -171,7 +174,8 @@ test('utils.js: limits clamp configured tokens if percentage of chat context exc
   
   // Testing via imported functions
   const max_sum = get_max_sum_context();
-  const max_ceiling = Math.floor(max_sum / 2);
-  assert.ok(get_long_token_limit() <= max_ceiling);
-  assert.ok(get_short_token_limit() <= max_ceiling);
+  const max_ceiling_long = Math.floor(max_sum / 3);
+  const max_ceiling_short = Math.floor(max_sum / 2);
+  assert.ok(get_long_token_limit() <= max_ceiling_long);
+  assert.ok(get_short_token_limit() <= max_ceiling_short);
 });
