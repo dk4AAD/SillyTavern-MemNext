@@ -89,6 +89,7 @@ export class SummaryQueue {
   completed_tasks = 0;
   queue_running = false;
   last_summary_request_time = 0;
+  _running_promise = null;
 
   constructor() {}
 
@@ -97,6 +98,12 @@ export class SummaryQueue {
   add(index) {
     if (!this.tasks.includes(index)) {
       this.tasks.push(index);
+      if (this.queue_running) {
+        this.total_tasks++;
+        if (get_settings('auto_summarize_progress')) {
+          show_progress_bar('summarize', this.completed_tasks, this.total_tasks, "Summarizing...");
+        }
+      }
     }
   }
 
@@ -113,6 +120,7 @@ export class SummaryQueue {
     }
     this.hide_progress();
     this.queue_running = false;
+    this._running_promise = null;
     this.total_tasks = 0;
     this.completed_tasks = 0;
     if (get_settings('block_chat') && ctx && typeof ctx.activateSendButtons === 'function') {
@@ -156,7 +164,14 @@ export class SummaryQueue {
   }
 
   async run() {
-    if (this.queue_running || this.tasks.length === 0) return;
+    if (this.queue_running) {
+      if (this._running_promise) {
+        await this._running_promise;
+      }
+      return;
+    }
+    if (this.tasks.length === 0) return;
+
     this.queue_running = true;
     this.aborted = false;
     const ctx = getContext();
@@ -170,27 +185,30 @@ export class SummaryQueue {
     this.total_tasks = this.tasks.length;
     this.show_progress(this.completed_tasks, this.total_tasks, "Summarizing...");
 
-    const workers = [];
-    for (let i = 0; i < concurrency; i++) {
-      workers.push(this.worker());
-    }
-    await Promise.all(workers);
-    this.queue_running = false;
+    this._running_promise = (async () => {
+      try {
+        const workers = [];
+        for (let i = 0; i < concurrency; i++) {
+          workers.push(this.worker());
+        }
+        await Promise.all(workers);
+      } finally {
+        this.queue_running = false;
+        this._running_promise = null;
+        await this.hide_progress();
+        this.total_tasks = 0;
+        this.completed_tasks = 0;
+        if (get_settings('block_chat') && ctx && typeof ctx.activateSendButtons === 'function') {
+          ctx.activateSendButtons();
+        }
+      }
 
-    // Hide message summarization progress bar and yield repaint tick before fillup/compaction
-    await this.hide_progress();
-    this.total_tasks = 0;
-    this.completed_tasks = 0;
+      await refresh_memory();
+      update_all_message_visuals();
+      saveChatDebounced();
+    })();
 
-    // Run full fillup process using the newly generated summaries.
-    // If compaction triggers, compact_history shows and hides its own progress bar.
-    await refresh_memory();
-
-    if (get_settings('block_chat') && ctx && typeof ctx.activateSendButtons === 'function') {
-      ctx.activateSendButtons();
-    }
-
-    saveChatDebounced();
+    await this._running_promise;
   }
 
   async worker() {
@@ -454,6 +472,7 @@ export async function on_chat_event(event, data = null) {
         update_message_visuals(Number(data));
       }
       await auto_summarize_chat();
+      update_all_message_visuals();
       break;
     case 'char_message':
       if (data !== null && data !== undefined) {
@@ -465,6 +484,7 @@ export async function on_chat_event(event, data = null) {
           summaryQueue.add(Number(data));
           setTimeout(async () => {
             await summaryQueue.run();
+            update_all_message_visuals();
           }, 50);
         }
       } else {
@@ -473,7 +493,8 @@ export async function on_chat_event(event, data = null) {
         // and the browser immediately paints/prints the message in chat.
         setTimeout(async () => {
           await auto_summarize_chat();
-        }, 50);
+          update_all_message_visuals();
+        }, 100);
       }
       break;
     case 'message_edited':

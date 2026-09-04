@@ -82,3 +82,38 @@ test('summarization.js: on_chat_event dispatches various lifecycle events withou
   await on_chat_event('before_message', { type: 'chat', isDryRun: false });
   assert.ok(true);
 });
+
+test('summarization.js: SummaryQueue handles concurrent run calls and dynamic task additions', async () => {
+  const q = new SummaryQueue();
+  assert.equal(q.queue_running, false);
+
+  // Stub worker to simulate processing delay
+  let processed = [];
+  q.worker = async function() {
+    while (this.tasks.length > 0 && !this.aborted) {
+      const id = this.tasks.shift();
+      if (id === undefined) break;
+      await new Promise(r => setTimeout(r, 10));
+      processed.push(id);
+      this.step_progress();
+    }
+  };
+
+  q.add(10);
+  const p1 = q.run();
+  assert.equal(q.queue_running, true);
+  assert.equal(q.total_tasks, 1);
+
+  // Concurrently add task 20 while running
+  q.add(20);
+  assert.equal(q.total_tasks, 2);
+
+  // Concurrent call to run() should await the same running promise
+  const p2 = q.run();
+
+  await Promise.all([p1, p2]);
+  assert.equal(q.queue_running, false);
+  assert.deepEqual(processed, [10, 20]);
+  assert.equal(q.total_tasks, 0);
+  assert.equal(q.completed_tasks, 0);
+});

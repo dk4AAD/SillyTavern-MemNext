@@ -693,54 +693,63 @@ export async function initialize_chat_summarization({ mode = 'all', count = 0, p
     }
   }
 
-  if (unsummarized.length > 0) {
-    if (summaryQueue && typeof summaryQueue.add_extra_total === 'function') {
-      summaryQueue.add_extra_total(unsummarized.length, "Initial Chat Summarization...");
-    }
-    for (let idx of unsummarized) {
-      const prompt = await create_summary_prompt(idx);
-      if (prompt && prompt.length > 0) {
-        const res = await summarize_text(prompt);
-        if (res) {
-          set_data(chat[idx], 'memory', res);
-          set_data(chat[idx], 'hash', compute_hash(res));
+  try {
+    if (unsummarized.length > 0) {
+      if (summaryQueue && typeof summaryQueue.add === 'function' && typeof summaryQueue.run === 'function') {
+        for (let idx of unsummarized) {
+          summaryQueue.add(idx);
         }
-      }
-      if (summaryQueue && typeof summaryQueue.step_progress === 'function') {
-        summaryQueue.step_progress("Initial Chat Summarization...");
-      }
-    }
-  }
-
-  // Prior history handling
-  const cleanPrior = (priorHistory || '').trim();
-  let historyToStamp = cleanPrior;
-
-  if (!historyToStamp) {
-    for (let i = compactStart; i < chatLength; i++) {
-      const mem = get_memory(chat[i]);
-      if (mem) {
-        historyToStamp = mem;
-        break;
-      }
-    }
-  }
-
-  if (historyToStamp && chatLength > 0) {
-    const historyEnd = Math.max(0, compactStart - 1);
-    const uuid = add_chat_long_history(historyToStamp);
-    for (let i = 0; i <= historyEnd; i++) {
-      if (chat[i]) {
-        set_data(chat[i], 'long_history_uuid', uuid);
-        if (chat[i].extra?.[MODULE_NAME]) {
-          delete chat[i].extra[MODULE_NAME].long_term_history;
-          delete chat[i].extra[MODULE_NAME].long_term_hash;
-          delete chat[i].extra[MODULE_NAME].include;
+        await summaryQueue.run();
+      } else {
+        for (let idx of unsummarized) {
+          const prompt = await create_summary_prompt(idx);
+          if (prompt && prompt.length > 0) {
+            const res = await summarize_text(prompt);
+            if (res) {
+              set_data(chat[idx], 'memory', res);
+              set_data(chat[idx], 'hash', compute_hash(res));
+            }
+          }
         }
       }
     }
-  }
 
-  set_summary_initialized(true);
-  saveChatDebounced();
+    // Prior history handling
+    const cleanPrior = (priorHistory || '').trim();
+    let historyToStamp = cleanPrior;
+
+    if (!historyToStamp) {
+      for (let i = compactStart; i < chatLength; i++) {
+        const mem = get_memory(chat[i]);
+        if (mem) {
+          historyToStamp = mem;
+          break;
+        }
+      }
+    }
+
+    if (historyToStamp && chatLength > 0) {
+      const historyEnd = Math.max(0, compactStart - 1);
+      const uuid = add_chat_long_history(historyToStamp);
+      for (let i = 0; i <= historyEnd; i++) {
+        if (chat[i]) {
+          set_data(chat[i], 'long_history_uuid', uuid);
+          if (chat[i].extra?.[MODULE_NAME]) {
+            delete chat[i].extra[MODULE_NAME].long_term_history;
+            delete chat[i].extra[MODULE_NAME].long_term_hash;
+            delete chat[i].extra[MODULE_NAME].include;
+          }
+        }
+      }
+    }
+  } finally {
+    if (summaryQueue && typeof summaryQueue.finish_compaction_progress === 'function') {
+      await summaryQueue.finish_compaction_progress();
+    } else if (summaryQueue && typeof summaryQueue.hide_progress === 'function') {
+      await summaryQueue.hide_progress();
+    }
+    set_summary_initialized(true);
+    saveChatDebounced();
+    notify_memory_refresh_visuals();
+  }
 }
