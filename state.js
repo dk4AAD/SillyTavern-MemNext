@@ -92,6 +92,35 @@ export function notify_ui_refresh() {
   }
 }
 
+
+export function migrate_profile_prompts(settings_obj) {
+  if (!settings_obj || typeof settings_obj !== 'object') return false;
+  let modified = false;
+
+  const short_prompt = settings_obj.short_to_long_prompt;
+  if (
+    typeof short_prompt === 'string' &&
+    (short_prompt.includes('{{existing_long_memory}}') ||
+      short_prompt.includes('{{new_events}}') ||
+      short_prompt.includes('You are a memory consolidation assistant. Incorporate the recent events'))
+  ) {
+    settings_obj.short_to_long_prompt = default_short_to_long_prompt;
+    modified = true;
+  }
+
+  const long_prompt = settings_obj.long_compaction_prompt;
+  if (
+    typeof long_prompt === 'string' &&
+    (!long_prompt.includes('{{new_history_chunk}}') ||
+      long_prompt.includes('You are a memory consolidation assistant. The existing long-term memory narrative has grown too long'))
+  ) {
+    settings_obj.long_compaction_prompt = default_long_compaction_prompt;
+    modified = true;
+  }
+
+  return modified;
+}
+
 export function initialize_settings() {
   if (extension_settings[MODULE_NAME]) {
     log("Settings already initialized.");
@@ -102,6 +131,30 @@ export function initialize_settings() {
       'Default': structuredClone(default_settings)
     };
   }
+
+  // Automatic migration of legacy prompts in existing profiles and active settings
+  let need_save = false;
+  if (extension_settings[MODULE_NAME]?.profiles) {
+    for (const pName of Object.keys(extension_settings[MODULE_NAME].profiles)) {
+      if (migrate_profile_prompts(extension_settings[MODULE_NAME].profiles[pName])) {
+        need_save = true;
+      }
+    }
+  }
+  if (migrate_profile_prompts(extension_settings[MODULE_NAME])) {
+    need_save = true;
+  }
+  if (need_save) {
+    if (typeof saveSettingsDebounced === 'function') {
+      saveSettingsDebounced();
+    } else {
+      const ctx = getContext();
+      if (typeof ctx?.saveSettingsDebounced === 'function') {
+        ctx.saveSettingsDebounced();
+      }
+    }
+  }
+
   load_profile(get_settings('profile'));
 }
 
@@ -287,6 +340,9 @@ export function load_profile(profile = null) {
   let current_profile = get_settings('profile');
   if (!profile) profile = current_profile || 'Default';
   let settings = copy_settings(profile);
+  if (migrate_profile_prompts(settings) && extension_settings[MODULE_NAME]?.profiles?.[profile]) {
+    extension_settings[MODULE_NAME].profiles[profile] = structuredClone(settings);
+  }
   if (!Object.keys(settings).length) {
     if (profile === 'Default') {
       let profiles = get_settings('profiles') || {};

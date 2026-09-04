@@ -628,14 +628,17 @@ export class PromptEditInterface {
     this.default_prompt = config.default_prompt;
     this.macros = config.macros || [];
     this.ctx = getContext();
+    this.render_template();
+  }
 
+  render_template() {
     let macros_html = "";
     if (this.macros.length > 0) {
       macros_html = `<div style="flex: 1; border: 1px solid var(--SmartThemeBorderColor); border-radius: 5px; padding: 10px; overflow-y: auto; background-color: var(--SmartThemeBlurTintColor);">
                 <h4 style="margin-top: 0; margin-bottom: 10px;">Available Macros</h4>`;
       for (let m of this.macros) {
-        macros_html += `<div style="margin-bottom: 10px;">
-                    <div style="font-family: monospace; font-weight: bold; margin-bottom: 3px;">{{${m.name}}}</div>
+        macros_html += `<div class="macro_insert_item" data-macro="{{${m.name}}}" style="margin-bottom: 10px; cursor: pointer; padding: 4px; border-radius: 4px; transition: background 0.15s;" title="Click to insert {{${m.name}}} into prompt">
+                    <div style="font-family: monospace; font-weight: bold; margin-bottom: 3px; color: var(--SmartThemeQuoteColor, inherit);">{{${m.name}}}</div>
                     <div style="font-size: 0.9em; opacity: 0.9;">${m.desc}</div>
                 </div>`;
       }
@@ -660,7 +663,9 @@ export class PromptEditInterface {
   }
 
   async show() {
+    this.ctx = getContext();
     if (!this.ctx?.Popup) return;
+    this.render_template();
     const popup = new this.ctx.Popup(this.html_template, this.ctx.POPUP_TYPE.TEXT, '', {
       wider: true,
       okButton: 'Save',
@@ -670,10 +675,38 @@ export class PromptEditInterface {
     $content.closest('dialog').css('min-width', '70%');
     const $textarea = $content.find('#prompt_text');
     const $restore = $content.find('#restore_default');
-    $textarea.val(get_settings(this.setting_key) || this.default_prompt);
+
+    let current_val = get_settings(this.setting_key);
+    if (this.setting_key === 'short_to_long_prompt') {
+      if (!current_val || current_val.includes('{{existing_long_memory}}') || current_val.includes('{{new_events}}')) {
+        current_val = this.default_prompt;
+        set_settings(this.setting_key, current_val);
+      }
+    } else if (this.setting_key === 'long_compaction_prompt') {
+      if (!current_val || !current_val.includes('{{new_history_chunk}}')) {
+        current_val = this.default_prompt;
+        set_settings(this.setting_key, current_val);
+      }
+    }
+
+    $textarea.val(current_val || this.default_prompt);
     $restore.on('click', () => {
       $textarea.val(this.default_prompt);
     });
+
+    $content.find('.macro_insert_item').on('click', function () {
+      const macroTag = $(this).data('macro');
+      if (!macroTag) return;
+      const el = $textarea[0];
+      if (!el) return;
+      const start = el.selectionStart || 0;
+      const end = el.selectionEnd || 0;
+      const text = el.value;
+      el.value = text.substring(0, start) + macroTag + text.substring(end);
+      el.selectionStart = el.selectionEnd = start + macroTag.length;
+      el.focus();
+    });
+
     const result = await popup.show();
     if (result) {
       set_settings(this.setting_key, $textarea.val());
@@ -1679,7 +1712,7 @@ export function init_interfaces() {
   });
   promptInterface3 = new PromptEditInterface({
     setting_key: 'long_compaction_prompt',
-    title: 'Long-Term Compaction Prompt',
+    title: 'Long-Term Re-compaction Prompt',
     description: 'Template used to re-compact the long-term narrative when it approaches its token limit.',
     default_prompt: default_long_compaction_prompt,
     macros: [
