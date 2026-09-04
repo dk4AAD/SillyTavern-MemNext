@@ -54,7 +54,6 @@ export const default_settings = {
   compaction_threshold_percent: 85,
 
   // Truncation & Injection
-  summary_injection_separator: "\n* ",
   messages_to_keep: 5,
   kept_messages_context_threshold: 30,
 

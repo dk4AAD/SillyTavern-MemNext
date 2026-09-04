@@ -27,6 +27,8 @@ import {
   try_first_to_keep,
   try_for_cc,
   calculate_memo,
+  partition_balanced_token_batches,
+  map_reduce_compress,
   compact_history
 } from '../memory.js';
 import { chat_metadata, mockChat } from './mocks/sillytavern.js';
@@ -361,4 +363,32 @@ test('memory.js: initialize_chat_summarization mode all stamps message 0 with su
   assert.equal(block.text, 'Manual backstory text');
   assert.equal(get_long_history_uuid(mockChat[0]), block.uuid);
   assert.equal(get_long_history_uuid(mockChat[1]), null);
+});
+
+test('memory.js: partition_balanced_token_batches balances items evenly under capacity', () => {
+  const items = [
+    'Summary one with some words',
+    'Summary two with some more words and details',
+    'Summary three with even more descriptive content',
+    'Summary four short',
+    'Summary five another medium length piece'
+  ];
+  // Small capacity forces multiple batches
+  const batches = partition_balanced_token_batches(items, 30);
+  assert.ok(batches.length >= 2);
+  // Ensure all items are preserved in order
+  const flattened = batches.flat();
+  assert.deepEqual(flattened, items);
+});
+
+test('memory.js: map_reduce_compress executes map phase and returns compressed batches', async () => {
+  const items = [
+    'First event of significance.',
+    'Second event of combat and healing.',
+    'Third event of travel.'
+  ];
+  const compressed = await map_reduce_compress(items, 4096);
+  assert.ok(Array.isArray(compressed));
+  assert.ok(compressed.length >= 1);
+  assert.ok(typeof compressed[0] === 'string');
 });

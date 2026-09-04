@@ -9,6 +9,7 @@ import {
   count_tokens,
   get_chat_context_size,
   get_long_token_limit,
+  get_max_sum_context,
   get_short_token_limit,
   get_chat_cache_capacity,
   get_free_context_space,
@@ -144,4 +145,15 @@ test('utils.js: getStringHash and compute_hash compute fast distinguishing hashe
   assert.equal(compute_hash(null), '');
   assert.equal(compute_hash(undefined), '');
   assert.equal(getStringHash(''), 0);
+});
+
+test('utils.js: get_max_sum_context resolves from preset or falls back strictly to 4096', () => {
+  // Without preset configured, must return exactly 4096 (NOT chat context size 8192)
+  assert.equal(get_max_sum_context(), 4096);
+});
+
+test('utils.js: get_long_token_limit respects ceiling of max_sum_context / 2 minus overhead', () => {
+  const limit = get_long_token_limit();
+  const max_sum = get_max_sum_context();
+  assert.ok(limit <= Math.floor(max_sum / 2));
 });

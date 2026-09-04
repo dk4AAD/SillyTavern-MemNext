@@ -32,6 +32,10 @@ test('ui.js: init_interfaces instantiates all modal dialogs including injection 
   assert.equal(promptInterfaceShortTemplate.setting_key, 'short_template');
   assert.deepEqual(promptInterfaceLongTemplate.macros, [{ name: 'memnext_long', desc: 'The consolidated long-term memory narrative.' }]);
   assert.deepEqual(promptInterfaceShortTemplate.macros, [{ name: 'memnext_short', desc: 'The active short-term rolling summaries joined by the separator.' }]);
+  assert.equal(promptInterface2.title, 'Short Re-Compaction Prompt');
+  assert.deepEqual(promptInterface2.macros.map(m => m.name), ['short_memory_list', 'long_history_size']);
+  assert.ok(promptInterface3.macros.map(m => m.name).includes('new_history_chunk'));
+  assert.ok(promptInterface3.macros.map(m => m.name).includes('long_term_memory_size'));
   assert.ok(memoryEditInterface instanceof MemoryEditInterface);
 });
 

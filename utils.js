@@ -6,8 +6,8 @@ import { getContext } from '../../../extensions.js';
 import { debounce_timeout } from '../../../constants.js';
 import { itemizedPrompts } from '../../../../scripts/itemized-prompts.js';
 import { translate } from '../../../i18n.js';
-import { MODULE_NAME_FANCY, settings_content_class } from './constants.js';
-import { get_settings } from './state.js';
+import { MODULE_NAME_FANCY, settings_content_class, default_short_to_long_prompt, default_long_compaction_prompt } from './constants.js';
+import { get_settings, get_active_connection_profile } from './state.js';
 
 // Logging helpers
 export function log(...args) {
@@ -57,10 +57,40 @@ export function get_chat_context_size() {
   return getMaxContextSize() || 4096;
 }
 
+export function get_max_sum_context() {
+  const profile = get_active_connection_profile();
+  if (profile?.preset) {
+    const context = getContext();
+    const presetName = profile.preset;
+    if (context?.getPresetManager) {
+      if (profile.mode === 'cc' || profile.api === 'openai') {
+        const preset = context.getPresetManager('openai')?.getCompletionPresetByName(presetName);
+        if (preset && typeof preset.openai_max_context === 'number' && preset.openai_max_context > 0) {
+          return preset.openai_max_context;
+        }
+      } else {
+        const preset = context.getPresetManager('textgenerationwebui')?.getPresetSettings(presetName);
+        if (preset && typeof preset.max_context === 'number' && preset.max_context > 0) {
+          return preset.max_context;
+        }
+      }
+    }
+  }
+  return 4096;
+}
+
 export function get_long_token_limit() {
   const limit_percent = Number(get_settings('long_term_context_limit')) || 20;
   const context_size = get_chat_context_size();
-  return Math.floor(context_size * (limit_percent / 100));
+  const configured_tokens = Math.floor(context_size * (limit_percent / 100));
+
+  const max_sum_context = get_max_sum_context();
+  const long_prompt = get_settings('long_compaction_prompt') || default_long_compaction_prompt;
+  const short_prompt = get_settings('short_to_long_prompt') || default_short_to_long_prompt;
+  const overhead = Math.max(count_tokens(long_prompt), count_tokens(short_prompt));
+  const max_long_tokens = Math.max(100, Math.floor(max_sum_context / 2) - overhead);
+
+  return Math.min(configured_tokens, max_long_tokens);
 }
 
 export function get_short_token_limit() {

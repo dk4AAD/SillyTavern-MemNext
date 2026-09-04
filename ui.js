@@ -27,6 +27,7 @@ import {
   count_tokens,
   get_chat_context_size,
   get_long_token_limit,
+  get_max_sum_context,
   get_short_token_limit,
   get_chat_cache_capacity,
   escape_string,
@@ -340,7 +341,6 @@ export function initialize_settings_ui() {
   bind_input('messages_to_keep', 'messages_to_keep', 'number');
   bind_input('kept_messages_context_threshold', 'kept_messages_context_threshold', 'number');
   bind_input('message_length_threshold', 'message_length_threshold', 'number');
-  bind_input('summary_injection_separator', 'summary_injection_separator', 'text');
   bind_input('injection_position', 'injection_position', 'number');
   bind_input('injection_role', 'injection_role', 'number');
 
@@ -1652,13 +1652,12 @@ export function init_interfaces() {
   promptInterface1 = new SummaryPromptEditInterface();
   promptInterface2 = new PromptEditInterface({
     setting_key: 'short_to_long_prompt',
-    title: 'Short \u2192 Long Compaction Prompt',
-    description: 'Template used to consolidate graduating short-term memories into the long-term narrative.',
+    title: 'Short Re-Compaction Prompt',
+    description: 'Template used to re-compact batches of short-term memories.',
     default_prompt: default_short_to_long_prompt,
     macros: [
-      { name: 'existing_long_memory', desc: 'The existing long-term narrative summary.' },
-      { name: 'new_events', desc: 'The block of recent short-term memories graduating to long-term.' },
-      { name: 'long_term_memory_size', desc: 'The current token size of the existing long-term memory.' }
+      { name: 'short_memory_list', desc: 'List of bare summaries separated with newlines.' },
+      { name: 'long_history_size', desc: 'Target size in words (calculated dynamically per batch).' }
     ]
   });
   promptInterface3 = new PromptEditInterface({
@@ -1667,8 +1666,9 @@ export function init_interfaces() {
     description: 'Template used to re-compact the long-term narrative when it approaches its token limit.',
     default_prompt: default_long_compaction_prompt,
     macros: [
-      { name: 'long_memory', desc: 'The combined long-term narrative that needs to be compacted.' },
-      { name: 'long_term_memory_size', desc: 'The current token size of the combined long-term memory.' }
+      { name: 'long_memory', desc: 'The previous story state.' },
+      { name: 'new_history_chunk', desc: 'A new piece of world information.' },
+      { name: 'long_term_memory_size', desc: 'Target size in words (max long history tokens / 1.4).' }
     ]
   });
   promptInterfaceLongTemplate = new PromptEditInterface({

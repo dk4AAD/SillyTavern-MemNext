@@ -2,7 +2,8 @@
 import { system_message_types, extension_prompt_roles, extension_prompt_types, chat_metadata } from '../../../../script.js';
 import { getContext, saveMetadataDebounced } from '../../../extensions.js';
 import { MODULE_NAME, long_memory_macro, short_memory_macro, generic_memories_macro } from './constants.js';
-import { saveChatDebounced, count_tokens, get_chat_context_size, get_long_token_limit, get_short_token_limit, get_chat_cache_capacity, compute_hash } from "./utils.js";
+import { saveChatDebounced, count_tokens, get_chat_context_size,
+  get_max_sum_context, get_long_token_limit, get_short_token_limit, get_chat_cache_capacity, compute_hash } from "./utils.js";
 import { get_settings, chat_enabled, character_enabled, get_character_key, get_summary_initialized, set_summary_initialized, is_chat_loaded } from "./state.js";
 import { summarize_text, summaryQueue } from "./summarization.js";
 import { default_short_to_long_prompt, default_long_compaction_prompt, default_long_template, default_short_template, create_summary_prompt } from "./macros.js";
@@ -290,10 +291,9 @@ export async function fillup() {
     }
     let short_injection = "";
     if (short_indexes && short_indexes.length > 0) {
-      const sep = get_settings('summary_injection_separator') || "\n* ";
       let summaries = short_indexes.map(idx => get_memory(chat[idx])).filter(Boolean);
       if (summaries.length > 0) {
-        let joined = summaries.join(sep);
+        let joined = summaries.join('\n');
         let template = get_settings('short_template') || default_short_template;
         short_injection = template.replace(new RegExp(`\\{\\{\\s*(?:${short_memory_macro}|${generic_memories_macro})\\s*\\}\\}`, 'g'), joined);
       }
@@ -453,6 +453,94 @@ export async function calculate_memo(history_calc_message) {
   }
 }
 
+export function partition_balanced_token_batches(items, max_capacity) {
+  if (!Array.isArray(items) || items.length === 0) return [];
+  if (items.length === 1) return [[items[0]]];
+
+  const item_tokens = items.map(s => count_tokens(s) + 1);
+  const total_tokens = item_tokens.reduce((acc, t) => acc + t, 0);
+
+  if (total_tokens <= max_capacity) {
+    return [items.slice()];
+  }
+
+  let num_batches = Math.ceil(total_tokens / max_capacity);
+  num_batches = Math.min(items.length, Math.max(1, num_batches));
+  const target_tokens = Math.ceil(total_tokens / num_batches);
+
+  const batches = [];
+  let current_batch = [];
+  let current_tokens = 0;
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const tok = item_tokens[i];
+    const remaining_items = items.length - i;
+    const remaining_batches = num_batches - batches.length;
+
+    const would_exceed = (current_tokens + tok > max_capacity);
+    const reached_target = (current_tokens >= target_tokens && remaining_items >= remaining_batches);
+
+    if (current_batch.length > 0 && (would_exceed || (reached_target && remaining_batches > 1))) {
+      batches.push(current_batch);
+      current_batch = [item];
+      current_tokens = tok;
+    } else {
+      current_batch.push(item);
+      current_tokens += tok;
+    }
+  }
+
+  if (current_batch.length > 0) {
+    batches.push(current_batch);
+  }
+
+  return batches;
+}
+
+export async function map_reduce_compress(items, max_sum_context, depth = 0) {
+  if (!items || items.length === 0) return [];
+  if (items.length === 1 && depth > 0) return items;
+
+  // 5.1 BATCH CALCULATION
+  const short_recomp_template = get_settings('short_to_long_prompt') || default_short_to_long_prompt;
+  const N = Math.floor((max_sum_context / 3) / 1.4);
+  const dummy_prompt = short_recomp_template
+    .replace(/{{short_memory_list}}/g, '')
+    .replace(/{{long_history_size}}/g, N);
+  const compact_prompt_tokens = count_tokens(dummy_prompt);
+  const BATCH_CAPACITY = Math.max(100, max_sum_context - compact_prompt_tokens);
+
+  const batches = partition_balanced_token_batches(items, BATCH_CAPACITY);
+
+  if (summaryQueue && typeof summaryQueue.add_extra_total === 'function') {
+    summaryQueue.add_extra_total(batches.length, "Compacting memory (short re-compaction)...");
+  }
+
+  // 5.2 MAP PHASE (Compression)
+  const compressed_batches = [];
+  for (const batch of batches) {
+    const compiled = short_recomp_template
+      .replace(/{{short_memory_list}}/g, batch.join('\n'))
+      .replace(/{{long_history_size}}/g, N);
+    const res = await summarize_text([{ role: 'system', content: compiled }]);
+    compressed_batches.push(res);
+    if (summaryQueue && typeof summaryQueue.step_progress === 'function') {
+      summaryQueue.step_progress("Compacting memory (short re-compaction)...");
+    }
+  }
+
+  // 5.3 REDUCE PHASE (Recursion Check)
+  const total_tokens = count_tokens(compressed_batches.join('\n'));
+  const half_max = Math.floor(max_sum_context / 2);
+  if (total_tokens <= half_max || compressed_batches.length === 1 || depth >= 5) {
+    return compressed_batches;
+  }
+
+  // Recursion
+  return await map_reduce_compress(compressed_batches, max_sum_context, depth + 1);
+}
+
 export async function compact_history(compact_start, history_calc_message, old_history) {
   const ctx = getContext();
   const chat = ctx?.chat;
@@ -464,99 +552,41 @@ export async function compact_history(compact_start, history_calc_message, old_h
     if (mem) summaries.push(mem);
   }
 
-  let long_budget = get_long_token_limit();
-  let chunks = [];
-  let current_chunk = [];
-  let current_size = 0;
+  if (summaries.length === 0) return old_history || "";
 
-  for (let s of summaries) {
-    let sz = count_tokens(s);
-    if (current_size + sz > long_budget && current_chunk.length > 0) {
-      chunks.push(current_chunk);
-      current_chunk = [s];
-      current_size = sz;
-    } else {
-      current_chunk.push(s);
-      current_size += sz;
-    }
+  const max_sum_context = get_max_sum_context();
+
+  // 5.1 - 5.3: Map-Reduce compression
+  const final_compressed = await map_reduce_compress(summaries, max_sum_context);
+
+  // 5.4 FINAL MERGE
+  const new_history_chunk = final_compressed.join('\n');
+  const long_compaction_template = get_settings('long_compaction_prompt') || default_long_compaction_prompt;
+  const long_budget = get_long_token_limit();
+  const target_words = Math.floor(long_budget / 1.4);
+
+  const compiled_long = long_compaction_template
+    .replace(/{{long_memory}}/g, old_history || '')
+    .replace(/{{existing_long_memory}}/g, old_history || '')
+    .replace(/{{new_history_chunk}}/g, new_history_chunk)
+    .replace(/{{long_term_memory_size}}/g, target_words);
+
+  if (summaryQueue && typeof summaryQueue.add_extra_total === 'function') {
+    summaryQueue.add_extra_total(1, "Compacting long-term memory...");
   }
-  if (current_chunk.length > 0) chunks.push(current_chunk);
-
-  // Extend progress bar total counter by the number of short-to-long batches
-  if (chunks.length > 0 && summaryQueue && typeof summaryQueue.add_extra_total === 'function') {
-    summaryQueue.add_extra_total(chunks.length, "Compacting memory (short to long)...");
-  }
-
-  let chunk_results = [];
-  let prompt_template = get_settings('short_to_long_prompt') || default_short_to_long_prompt;
-  let old_size = old_history ? count_tokens(old_history) : 0;
-
-  for (let i = 0; i < chunks.length; i++) {
-    let combined = chunks[i].join('\n');
-    let compiled = prompt_template
-      .replace(/{{existing_long_memory}}/g, old_history || '')
-      .replace(/{{new_events}}/g, combined)
-      .replace(/{{long_term_memory_size}}/g, old_size);
-    const payload = [{
-      role: 'system',
-      content: compiled
-    }];
-    let res = await summarize_text(payload);
-    chunk_results.push(res);
-    if (summaryQueue && typeof summaryQueue.step_progress === 'function') {
-      summaryQueue.step_progress("Compacting memory (short to long)...");
-    }
-  }
-
-  let combined_new = chunk_results.join('\n');
-  let final_long = "";
-  let long_compaction_template = get_settings('long_compaction_prompt') || default_long_compaction_prompt;
-
-  if (old_history) {
-    let combined_all = old_history + "\n" + combined_new;
-    if (count_tokens(combined_all) > long_budget) {
-      let size = count_tokens(combined_all);
-      let compiled = long_compaction_template
-        .replace(/{{long_memory}}/g, combined_all)
-        .replace(/{{long_term_memory_size}}/g, size);
-      if (summaryQueue && typeof summaryQueue.add_extra_total === 'function') {
-        summaryQueue.add_extra_total(1, "Compacting long-term memory...");
-      }
-      final_long = await summarize_text([{
-        role: 'system',
-        content: compiled
-      }]);
-      if (summaryQueue && typeof summaryQueue.step_progress === 'function') {
-        summaryQueue.step_progress("Compacting long-term memory...");
-      }
-    } else {
-      final_long = combined_all;
-    }
-  } else {
-    if (count_tokens(combined_new) > long_budget) {
-      let size = count_tokens(combined_new);
-      let compiled = long_compaction_template
-        .replace(/{{long_memory}}/g, combined_new)
-        .replace(/{{long_term_memory_size}}/g, size);
-      if (summaryQueue && typeof summaryQueue.add_extra_total === 'function') {
-        summaryQueue.add_extra_total(1, "Compacting long-term memory...");
-      }
-      final_long = await summarize_text([{
-        role: 'system',
-        content: compiled
-      }]);
-      if (summaryQueue && typeof summaryQueue.step_progress === 'function') {
-        summaryQueue.step_progress("Compacting long-term memory...");
-      }
-    } else {
-      final_long = combined_new;
-    }
+  const final_long = await summarize_text([{
+    role: 'system',
+    content: compiled_long
+  }]);
+  if (summaryQueue && typeof summaryQueue.step_progress === 'function') {
+    summaryQueue.step_progress("Compacting long-term memory...");
   }
 
   if (summaryQueue && typeof summaryQueue.finish_compaction_progress === 'function') {
     await summaryQueue.finish_compaction_progress();
   }
 
+  // 5.5 HISTORY UPDATES
   const uuid = add_chat_long_history(final_long);
   for (let i = compact_start; i <= history_calc_message; i++) {
     if (chat[i]) {

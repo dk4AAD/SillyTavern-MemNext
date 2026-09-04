@@ -64,7 +64,7 @@
                         <button id="edit_message_summary_prompt" class="menu_button flex1" title="Edit prompt used to summarize individual messages">Edit</button>
                     </div>
                     <div class="flex-container justifyspacebetween alignitemscenter" style="margin-bottom: 5px;">
-                        <span class="flex2" style="font-weight: 500;">2. Short &rarr; Long Compaction</span>
+                        <span class="flex2" style="font-weight: 500;">2. Short Re-Compaction</span>
                         <button id="edit_short_to_long_prompt" class="menu_button flex1" title="Edit prompt used to compact short-term summaries into long-term narrative">Edit</button>
                     </div>
                     <div class="flex-container justifyspacebetween alignitemscenter" style="margin-bottom: 5px;">
@@ -182,11 +182,6 @@
                     <!-- Injection & Cache Preservation -->
                     <hr>
                     <h4 class="textAlignCenter">Injection &amp; KV Cache <i class="fa-solid fa-info-circle" title="Injected after system prompt to preserve model attention and maintain prompt cache coherence."></i></h4>
-
-                    <label title="Separator between summaries when injected into context." class="checkbox_label">
-                        <input id="summary_injection_separator" class="text_pole" type="text" style="width: 3.5em">
-                        <span>Summary Separator</span>
-                    </label>
 
                     <label title="Minimum number of recent messages to always keep in raw chat, regardless of context size (unless they exceed the threshold below)." class="checkbox_label">
                         <input id="messages_to_keep" class="text_pole inline_setting" type="number" min="0" max="999" />
