@@ -4,6 +4,7 @@ import {
   init_interfaces,
   promptInterface1,
   promptInterface2,
+  promptInterfaceLongInitiate,
   promptInterface3,
   promptInterfaceLongTemplate,
   promptInterfaceShortTemplate,
@@ -25,6 +26,7 @@ test('ui.js: init_interfaces instantiates all modal dialogs including injection 
   init_interfaces();
   assert.ok(promptInterface1 instanceof SummaryPromptEditInterface);
   assert.ok(promptInterface2 instanceof PromptEditInterface);
+  assert.ok(promptInterfaceLongInitiate instanceof PromptEditInterface);
   assert.ok(promptInterface3 instanceof PromptEditInterface);
   assert.ok(promptInterfaceLongTemplate instanceof PromptEditInterface);
   assert.ok(promptInterfaceShortTemplate instanceof PromptEditInterface);
@@ -32,6 +34,9 @@ test('ui.js: init_interfaces instantiates all modal dialogs including injection 
   assert.equal(promptInterfaceShortTemplate.setting_key, 'short_template');
   assert.deepEqual(promptInterfaceLongTemplate.macros, [{ name: 'memnext_long', desc: 'The consolidated long-term memory narrative.' }]);
   assert.deepEqual(promptInterfaceShortTemplate.macros, [{ name: 'memnext_short', desc: 'The active short-term rolling summaries joined by the separator.' }]);
+  assert.equal(promptInterfaceLongInitiate.setting_key, 'long_history_initiate');
+  assert.ok(promptInterfaceLongInitiate.macros.map(m => m.name).includes('new_history_chunk'));
+  assert.ok(promptInterfaceLongInitiate.macros.map(m => m.name).includes('long_term_memory_size'));
   assert.equal(promptInterface2.title, 'Short Re-Compaction Prompt');
   assert.deepEqual(promptInterface2.macros.map(m => m.name), ['short_memory_list', 'long_history_size']);
   assert.ok(promptInterface3.macros.map(m => m.name).includes('new_history_chunk'));

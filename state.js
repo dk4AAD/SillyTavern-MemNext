@@ -6,6 +6,7 @@ import {
   settings_content_class,
   default_message_summary_prompt,
   default_short_to_long_prompt,
+  default_long_history_initiate_prompt,
   default_long_compaction_prompt,
   default_long_template,
   default_short_template,
@@ -28,6 +29,7 @@ export const default_settings = {
   // Editable prompts & templates
   message_summary_prompt: default_message_summary_prompt,
   short_to_long_prompt: default_short_to_long_prompt,
+  long_history_initiate: default_long_history_initiate_prompt,
   long_compaction_prompt: default_long_compaction_prompt,
   summary_prompt_macros: default_summary_macros,
   long_template: default_long_template,

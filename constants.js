@@ -63,6 +63,21 @@ export const default_short_to_long_prompt = `You are an expert lore archivist. Y
 
 export const default_short_recompaction_prompt = default_short_to_long_prompt;
 
+export const default_long_history_initiate_prompt = `You are an expert lore archivist maintaining a dynamic, long-term story encyclopedia.
+Your task is to synthesize RECENT EVENTS into a solid, condensed initial chapter, creating a single, highly compressed chronological narrative.
+
+INSTRUCTIONS:
+1. STRICT CHRONOLOGY: Arrange all events into a seamless chapter strictly in the order they occurred.
+2. STATE OVERWRITE (CRITICAL): Resolve any internal contradictions within the events. If characters change location, achieve a goal, or change status, output ONLY their final state/reality.
+3. EXTREME COMPRESSION: Condense events ruthlessly. Older events require less detail than the most recent ones.
+4. ADVANCED SYNTAX: Use dense, complex sentences with participles and relative clauses. Maintain a strictly factual, encyclopedia-like tone.
+
+RECENT EVENTS:
+{{new_history_chunk}}
+
+CRITICAL REQUIREMENT: Output ONLY the raw narrative text (Max {{long_term_memory_size}} words). Do NOT include titles, headers, prefixes, or any conversational filler.
+`;
+
 export const default_long_compaction_prompt = `You are an expert lore archivist maintaining a dynamic, long-term story encyclopedia.
 Your task is to merge the NEW STORY CHAPTER into the PREVIOUS STORY STATE, creating a single, updated, and highly compressed chronological narrative.
 

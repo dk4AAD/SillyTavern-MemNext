@@ -385,3 +385,26 @@ test('memory.js: map_reduce_compress executes map phase and returns compressed b
   assert.ok(compressed.length >= 1);
   assert.ok(typeof compressed[0] === 'string');
 });
+
+test('memory.js: compact_history uses long_history_initiate when old_history is empty', async () => {
+  mockChat.length = 0;
+  chat_metadata.memnext = { long_histories: [] };
+  for (let i = 0; i < 6; i++) {
+    mockChat.push({
+      mes: `Action step ${i}`,
+      extra: { memnext: { memory: `Summary of action ${i}` } }
+    });
+  }
+
+  // Pass empty string for old_history -> should route to long_history_initiate template
+  const initialLong = await compact_history(1, 4, '');
+  assert.ok(initialLong.length > 0);
+  const chatHistories = get_chat_long_histories();
+  assert.equal(chatHistories.length, 1);
+  assert.equal(chatHistories[0].history_text, initialLong);
+
+  // Subsequent call with existing old_history -> should route to long_compaction_prompt
+  const secondLong = await compact_history(1, 4, initialLong);
+  assert.ok(secondLong.length > 0);
+  assert.equal(chatHistories.length, 2);
+});

@@ -6,7 +6,7 @@ import { log, saveChatDebounced, count_tokens, get_chat_context_size,
   get_max_sum_context, get_long_token_limit, get_short_token_limit, get_chat_cache_capacity, compute_hash } from "./utils.js";
 import { get_settings, chat_enabled, character_enabled, get_character_key, get_summary_initialized, set_summary_initialized, is_chat_loaded } from "./state.js";
 import { summarize_text, summaryQueue } from "./summarization.js";
-import { default_short_to_long_prompt, default_long_compaction_prompt, default_long_template, default_short_template, create_summary_prompt } from "./macros.js";
+import { default_short_to_long_prompt, default_long_history_initiate_prompt, default_long_compaction_prompt, default_long_template, default_short_template, create_summary_prompt } from "./macros.js";
 
 // Optional callback for UI budget display refresh
 var _ui_budget_refresh_callback = null;
@@ -569,27 +569,43 @@ export async function compact_history(compact_start, history_calc_message, old_h
 
   // 5.4 FINAL MERGE
   const new_history_chunk = final_compressed.join('\n');
-  const long_compaction_template = get_settings('long_compaction_prompt') || default_long_compaction_prompt;
   const long_budget = get_long_token_limit();
   const target_words = Math.floor(long_budget / 1.4);
 
-  const compiled_long = long_compaction_template
-    .replace(/{{long_memory}}/g, old_history || '')
-    .replace(/{{existing_long_memory}}/g, old_history || '')
-    .replace(/{{new_history_chunk}}/g, new_history_chunk)
-    .replace(/{{long_term_memory_size}}/g, target_words);
+  const is_initiate = !old_history || !old_history.trim();
+  let compiled_prompt = '';
+  let stage_label = '';
 
-  const long_prompt_tokens = count_tokens(compiled_long);
-  log(`[Compaction Final Long Merge] Estimated prompt tokens: ${long_prompt_tokens} (long_budget: ${long_budget} tokens, target_words: ${target_words}, new_history_chunk tokens: ${count_tokens(new_history_chunk)}):\n--- PROMPT START ---\n${compiled_long}\n--- PROMPT END ---`);
+  if (is_initiate) {
+    stage_label = 'Long-Term History Initiation';
+    const initiate_template = get_settings('long_history_initiate') || default_long_history_initiate_prompt;
+    compiled_prompt = initiate_template
+      .replace(/{{new_history_chunks}}/g, new_history_chunk)
+      .replace(/{{new_history_chunk}}/g, new_history_chunk)
+      .replace(/{{long_term_memory_size}}/g, target_words);
+    log(`[Compaction ${stage_label}] Existing long-term history is empty. Using long_history_initiate template.`);
+  } else {
+    stage_label = 'Final Long Merge';
+    const long_compaction_template = get_settings('long_compaction_prompt') || default_long_compaction_prompt;
+    compiled_prompt = long_compaction_template
+      .replace(/{{long_memory}}/g, old_history || '')
+      .replace(/{{existing_long_memory}}/g, old_history || '')
+      .replace(/{{new_history_chunk}}/g, new_history_chunk)
+      .replace(/{{long_term_memory_size}}/g, target_words);
+    log(`[Compaction ${stage_label}] Existing long-term history found (${count_tokens(old_history)} tokens). Using long_compaction_prompt template.`);
+  }
+
+  const prompt_tokens = count_tokens(compiled_prompt);
+  log(`[Compaction ${stage_label}] Estimated prompt tokens: ${prompt_tokens} (long_budget: ${long_budget} tokens, target_words: ${target_words}, new_history_chunk tokens: ${count_tokens(new_history_chunk)}):\n--- PROMPT START ---\n${compiled_prompt}\n--- PROMPT END ---`);
 
   if (summaryQueue && typeof summaryQueue.add_extra_total === 'function') {
     summaryQueue.add_extra_total(1, "Compacting long-term memory...");
   }
   const final_long = await summarize_text([{
     role: 'system',
-    content: compiled_long
+    content: compiled_prompt
   }]);
-  log(`[Compaction Final Long Merge] Response tokens: ${count_tokens(final_long)}:\n--- RESPONSE START ---\n${final_long}\n--- RESPONSE END ---`);
+  log(`[Compaction ${stage_label}] Response tokens: ${count_tokens(final_long)}:\n--- RESPONSE START ---\n${final_long}\n--- RESPONSE END ---`);
   if (summaryQueue && typeof summaryQueue.step_progress === 'function') {
     summaryQueue.step_progress("Compacting long-term memory...");
   }

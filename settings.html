@@ -56,7 +56,7 @@
 
                 <!-- Profile-specific Options Container (Hidden when profile is disabled) -->
                 <div id="memnext_profile_options">
-                    <!-- Prompt Templates (5 Windows) -->
+                    <!-- Prompt Templates (6 Windows) -->
                     <hr>
                     <h4 class="textAlignCenter">Prompt Templates <i class="fa-solid fa-info-circle" title="Templates for summarization prompts, memory compaction, and memory injection framing."></i></h4>
                     <div class="flex-container justifyspacebetween alignitemscenter" style="margin-bottom: 5px;">
@@ -68,15 +68,19 @@
                         <button id="edit_short_to_long_prompt" class="menu_button flex1" title="Edit prompt used to compact short-term summaries into long-term narrative">Edit</button>
                     </div>
                     <div class="flex-container justifyspacebetween alignitemscenter" style="margin-bottom: 5px;">
-                        <span class="flex2" style="font-weight: 500;">3. Long-Term Re-compaction</span>
+                        <span class="flex2" style="font-weight: 500;">3. Long-Term Initiation</span>
+                        <button id="edit_long_history_initiate_prompt" class="menu_button flex1" title="Edit prompt used to establish initial long-term narrative from the first compressed batch">Edit</button>
+                    </div>
+                    <div class="flex-container justifyspacebetween alignitemscenter" style="margin-bottom: 5px;">
+                        <span class="flex2" style="font-weight: 500;">4. Long-Term Re-compaction</span>
                         <button id="edit_long_compaction_prompt" class="menu_button flex1" title="Edit prompt used to re-compact long-term memory when budget overflows">Edit</button>
                     </div>
                     <div class="flex-container justifyspacebetween alignitemscenter" style="margin-bottom: 5px;">
-                        <span class="flex2" style="font-weight: 500;">4. Long-Term Injection Template</span>
+                        <span class="flex2" style="font-weight: 500;">5. Long-Term Injection Template</span>
                         <button id="edit_long_template" class="menu_button flex1" title="Edit template framing long-term memory for injection">Edit</button>
                     </div>
                     <div class="flex-container justifyspacebetween alignitemscenter" style="margin-bottom: 5px;">
-                        <span class="flex2" style="font-weight: 500;">5. Short-Term Injection Template</span>
+                        <span class="flex2" style="font-weight: 500;">6. Short-Term Injection Template</span>
                         <button id="edit_short_template" class="menu_button flex1" title="Edit template framing short-term memory for injection">Edit</button>
                     </div>
 

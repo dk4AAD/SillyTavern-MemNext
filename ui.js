@@ -97,6 +97,7 @@ import {
 } from './summarization.js';
 import {
   default_short_to_long_prompt,
+  default_long_history_initiate_prompt,
   default_long_compaction_prompt,
   default_long_template,
   default_short_template,
@@ -279,6 +280,7 @@ export function update_save_icon_highlight() {
 // UI Initialization & Binding
 export let promptInterface1 = null;
 export let promptInterface2 = null;
+export let promptInterfaceLongInitiate = null;
 export let promptInterface3 = null;
 export let promptInterfaceLongTemplate = null;
 export let promptInterfaceShortTemplate = null;
@@ -363,6 +365,7 @@ export function initialize_settings_ui() {
   // Prompt Edit buttons
   $(`.${settings_content_class} #edit_message_summary_prompt`).on('click', () => promptInterface1?.show());
   $(`.${settings_content_class} #edit_short_to_long_prompt`).on('click', () => promptInterface2?.show());
+  $(`.${settings_content_class} #edit_long_history_initiate_prompt`).on('click', () => promptInterfaceLongInitiate?.show());
   $(`.${settings_content_class} #edit_long_compaction_prompt`).on('click', () => promptInterface3?.show());
   $(`.${settings_content_class} #edit_long_template`).on('click', () => promptInterfaceLongTemplate?.show());
   $(`.${settings_content_class} #edit_short_template`).on('click', () => promptInterfaceShortTemplate?.show());
@@ -1695,6 +1698,16 @@ export function init_interfaces() {
     macros: [
       { name: 'short_memory_list', desc: 'List of bare summaries separated with newlines.' },
       { name: 'long_history_size', desc: 'Target size in words (calculated dynamically per batch).' }
+    ]
+  });
+  promptInterfaceLongInitiate = new PromptEditInterface({
+    setting_key: 'long_history_initiate',
+    title: 'Long-Term Initiation Prompt',
+    description: 'Template used to synthesize recent events into the initial long-term chapter when existing long-term history is empty.',
+    default_prompt: default_long_history_initiate_prompt,
+    macros: [
+      { name: 'new_history_chunk', desc: 'A new piece of world information from the recent events.' },
+      { name: 'long_term_memory_size', desc: 'Target size in words (max long history tokens / 1.4).' }
     ]
   });
   promptInterface3 = new PromptEditInterface({
