@@ -96,7 +96,15 @@ export function get_long_token_limit() {
 export function get_short_token_limit() {
   const limit_percent = Number(get_settings('short_term_context_limit')) || 15;
   const context_size = get_chat_context_size();
-  return Math.floor(context_size * (limit_percent / 100));
+  const configured_tokens = Math.floor(context_size * (limit_percent / 100));
+
+  const max_sum_context = get_max_sum_context();
+  const long_prompt = get_settings('long_compaction_prompt') || default_long_compaction_prompt;
+  const short_prompt = get_settings('short_to_long_prompt') || default_short_to_long_prompt;
+  const overhead = Math.max(count_tokens(long_prompt), count_tokens(short_prompt));
+  const max_short_tokens = Math.max(100, Math.floor(max_sum_context / 2) - overhead);
+
+  return Math.min(configured_tokens, max_short_tokens);
 }
 
 export function get_chat_cache_capacity(context_size = null, ctx = null) {

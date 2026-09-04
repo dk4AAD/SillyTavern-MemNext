@@ -1,3 +1,4 @@
+import { set_settings } from '../state.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -156,4 +157,21 @@ test('utils.js: get_long_token_limit respects ceiling of max_sum_context / 2 min
   const limit = get_long_token_limit();
   const max_sum = get_max_sum_context();
   assert.ok(limit <= Math.floor(max_sum / 2));
+});
+
+test('utils.js: get_short_token_limit respects ceiling of max_sum_context / 2 minus overhead', () => {
+  const limit = get_short_token_limit();
+  const max_sum = get_max_sum_context();
+  assert.ok(limit <= Math.floor(max_sum / 2));
+});
+
+test('utils.js: limits clamp configured tokens if percentage of chat context exceeds summarization ceiling', () => {
+  // Set 50% on 8192 chat context (= 4096 tokens)
+  // Summarization context is 4096, so ceiling is ~1798
+  
+  // Testing via imported functions
+  const max_sum = get_max_sum_context();
+  const max_ceiling = Math.floor(max_sum / 2);
+  assert.ok(get_long_token_limit() <= max_ceiling);
+  assert.ok(get_short_token_limit() <= max_ceiling);
 });

@@ -303,7 +303,23 @@ export function initialize_settings_ui() {
     } else if (type === 'number') {
       $el.val(get_settings(key));
       $el.off('change.memnext input.memnext').on('change.memnext input.memnext', function () {
-        set_settings(key, Number($(this).val()));
+        let val = Number($(this).val());
+        if (key === 'long_term_context_limit' || key === 'short_term_context_limit') {
+          const max_attr = Number($(this).attr('max'));
+          const min_attr = Number($(this).attr('min')) || 1;
+          if (!isNaN(max_attr) && val > max_attr) {
+            val = max_attr;
+            $(this).val(val);
+          } else if (val < min_attr && $(this).val() !== '') {
+            val = min_attr;
+            $(this).val(val);
+          }
+        } else if (key === 'compaction_threshold_percent') {
+          if (val > 100) { val = 100; $(this).val(val); }
+          else if (val < 1 && $(this).val() !== '') { val = 1; $(this).val(val); }
+        }
+        set_settings(key, val);
+        update_context_budget_displays();
         refresh_memory();
         update_save_icon_highlight();
       });
@@ -444,6 +460,7 @@ export function update_connection_profile_dropdown() {
   $dropdown.on('change', function () {
     set_settings('connection_profile', $(this).val());
     update_save_icon_highlight();
+    update_context_budget_displays();
   });
 }
 
