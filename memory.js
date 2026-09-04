@@ -591,11 +591,6 @@ export async function compact_history(compact_start, history_calc_message, old_h
   for (let i = compact_start; i <= history_calc_message; i++) {
     if (chat[i]) {
       set_data(chat[i], 'long_history_uuid', uuid);
-      if (chat[i].extra?.[MODULE_NAME]) {
-        delete chat[i].extra[MODULE_NAME].long_term_history;
-        delete chat[i].extra[MODULE_NAME].long_term_hash;
-        delete chat[i].extra[MODULE_NAME].include;
-      }
     }
   }
   saveChatDebounced();
@@ -764,11 +759,6 @@ export async function initialize_chat_summarization({ mode = 'all', count = 0, p
       for (let i = 0; i <= historyEnd; i++) {
         if (chat[i]) {
           set_data(chat[i], 'long_history_uuid', uuid);
-          if (chat[i].extra?.[MODULE_NAME]) {
-            delete chat[i].extra[MODULE_NAME].long_term_history;
-            delete chat[i].extra[MODULE_NAME].long_term_hash;
-            delete chat[i].extra[MODULE_NAME].include;
-          }
         }
       }
     }
